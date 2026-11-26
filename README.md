@@ -3,7 +3,13 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="logo/vobiz-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="logo/vobiz-light.png">
-  <img alt="Vobiz" src="logo/vobiz-light.png" width="200">
+  <img alt="Vobiz" src="logo/vobiz-light.png" height="56">
+</picture>
+&nbsp;&nbsp;&nbsp;&nbsp;
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="logo/speechmatics-white.png">
+  <source media="(prefers-color-scheme: light)" srcset="logo/speechmatics-black.png">
+  <img alt="Speechmatics" src="logo/speechmatics-black.png" height="30">
 </picture>
 
 # Vobiz + Speechmatics
