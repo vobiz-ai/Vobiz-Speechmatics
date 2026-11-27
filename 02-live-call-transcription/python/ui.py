@@ -56,9 +56,10 @@ def _logo(name: str) -> str:
         return ""
 
 
-def page(events_path: str, vobiz_number: str, forward_to: str, language: str) -> bytes:
+def page(events_path: str, vobiz_number: str, forward_to: str, language: str, lines: list | None = None) -> bytes:
     return (
         PAGE.replace("__EVENTS_PATH__", events_path)
+        .replace("__LINES__", json.dumps(lines or []))
         .replace("__LOGO_VZ__", _logo("vobiz-light.png"))
         .replace("__LOGO_SM__", _logo("speechmatics-black.png"))
         .replace("__VOBIZ_NUMBER__", escape(vobiz_number or ""))
@@ -121,18 +122,39 @@ main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:0;min-hei
 .greet{align-self:center;font-size:13px;color:var(--ink);padding:6px 14px;border-radius:999px;background:color-mix(in srgb,var(--vobiz) 14%,transparent);border:1px solid color-mix(in srgb,var(--vobiz) 40%,transparent)}
 .greet b{color:var(--vobiz);margin-right:6px}
 .sys{align-self:center;font-size:12.5px;color:var(--muted);font-family:var(--mono);padding:4px 10px;border:1px dashed var(--line);border-radius:999px}
-aside{border-left:1px solid #2c2522;background:#151110;color:#f3eeeb;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
-aside h3{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#8d837e;margin:0 0 8px}
+aside{border-left:1px solid var(--line);background:var(--panel);color:var(--ink);padding:22px;overflow-y:auto;display:flex;flex-direction:column;gap:22px}
+aside h3{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sm);margin:0 0 10px}
 .legend{display:flex;flex-direction:column;gap:10px;font-size:14px}
 .legend div{display:flex;align-items:center;gap:10px}
 .sw{width:12px;height:12px;border-radius:4px}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.stat{border:1px solid #2c2522;background:#1e1917;border-radius:10px;padding:10px}
-.stat .v{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
-.stat .l{font-size:12px;color:#8d837e}
-.pipeline{font-size:13px;color:#8d837e;display:flex;flex-direction:column;gap:6px}
-.pipeline span{font-family:var(--mono);color:#f3eeeb}
-button{font:inherit;font-size:13px;padding:7px 14px;border-radius:6px;border:1px solid #3a322e;background:#1e1917;color:#f3eeeb;cursor:pointer}
+.stat{border:1px solid var(--line);background:#f7f8f8;border-radius:10px;padding:12px}
+.stat .v{font-family:var(--mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--muted)}
+.pipeline{font-size:13.5px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.pipeline span{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+button{font:inherit;font-size:13.5px;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--sm);color:var(--sm)}
+main{grid-template-columns:minmax(0,1fr) 320px}
+.gear{display:inline-flex;align-items:center;gap:8px;height:36px;font-weight:500}
+.scrim{position:fixed;inset:0;background:rgba(22,12,8,.28);opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.08);transform:translateX(100%);transition:transform .22s ease;z-index:11;display:flex;flex-direction:column}
+body.open .scrim{opacity:1;pointer-events:auto} body.open .drawer{transform:none}
+.dh{display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 24px;border-bottom:1px solid var(--line);font-family:var(--display);font-weight:600;font-size:17px}
+.dh button{border:0;font-size:24px;line-height:1;color:var(--muted);padding:4px 8px}
+.db{flex:1;overflow-y:auto;padding:22px 24px}
+.db h4{margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sm)}
+.db p{margin:0 0 16px;font-size:13.5px;color:var(--muted)}
+.fld{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.fld label{font-size:13px;font-weight:500}
+.fld label i{font-style:normal;display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.fld input,.fld select{height:42px;padding:0 12px;border:1px solid #d9dddf;border-radius:8px;font:15px var(--body);color:var(--ink);background:#fff}
+.fld input{font-family:var(--mono);font-size:16px}
+.fld input:focus,.fld select:focus{outline:2px solid #cddcdf;border-color:var(--sm)}
+.flow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:2px 0 16px;font-family:var(--mono)}
+.go{width:100%;height:44px;border:0;border-radius:8px;background:var(--vobiz);color:#fff;font-weight:600;font-size:15px}
+.go:hover{color:#fff;opacity:.92} .go:disabled{opacity:.55;cursor:default}
+.msgline{margin-top:10px;font-size:13.5px;min-height:20px} .msgline.ok{color:var(--ok)} .msgline.err{color:#c2410c}
 button:focus-visible{outline:2px solid var(--sm);outline-offset:2px}
 </style>
 </head>
@@ -141,11 +163,12 @@ button:focus-visible{outline:2px solid var(--sm);outline-offset:2px}
   <div class="brand"><img class="vz" src="__LOGO_VZ__" alt="Vobiz"><span class="x">×</span><img class="sm" src="__LOGO_SM__" alt="Speechmatics"><span class="title">Live call transcription</span></div>
   <div id="status" class="status waiting"><span class="dot"></span><span id="statusText">Waiting for a call</span></div>
   <div class="meta">
-    <span>Vobiz number <b>__VOBIZ_NUMBER__</b></span>
-    <span>Bridged to <b>__FORWARD_TO__</b></span>
+    <span>Vobiz number <b id="mFrom">__VOBIZ_NUMBER__</b></span>
+    <span>Bridged to <b id="mTo">__FORWARD_TO__</b></span>
     <span>Language <b>__LANGUAGE__</b></span>
     <span>Duration <b id="timer">0:00</b></span>
   </div>
+  <button class="gear" id="gear" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
 </header>
 <main>
   <section id="feed" aria-live="polite">
@@ -184,7 +207,43 @@ button:focus-visible{outline:2px solid var(--sm);outline-offset:2px}
     <div><button id="clear" type="button">Clear transcript</button></div>
   </aside>
 </main>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Settings">
+  <div class="dh">Settings<button id="close" type="button" aria-label="Close">×</button></div>
+  <div class="db">
+    <h4>Connect two people</h4>
+    <p>Vobiz rings party A. When A answers, it rings party B and joins them. Both sides are transcribed here live.</p>
+    <div class="flow">Vobiz → A → B</div>
+    <div class="fld"><label for="from">Call from (Vobiz number)</label><select id="from"></select></div>
+    <div class="fld"><label for="pa"><i style="background:var(--a)"></i>Party A (rung first)</label><input id="pa" type="tel" placeholder="+44 7700 900123"></div>
+    <div class="fld"><label for="pb"><i style="background:#29a383"></i>Party B (rung when A answers)</label><input id="pb" type="tel" placeholder="+91 91482 27303"></div>
+    <button class="go" id="go" type="button">Call A, then connect B</button>
+    <div class="msgline" id="gom"></div>
+  </div>
+</aside>
 <script>
+const LINES = __LINES__;
+const fmtN = (n) => { let m; if ((m = n.match(/^\+44(\d{4})(\d{6})$/))) return `+44 ${m[1]} ${m[2]}`; if ((m = n.match(/^\+91(\d{5})(\d{5})$/))) return `+91 ${m[1]} ${m[2]}`; return n; };
+const $ = (id) => document.getElementById(id);
+LINES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = fmtN(n); $('from').appendChild(o); });
+const clean = (v) => v.replace(/[\s().-]/g, '');
+$('pa').oninput = () => { const a = clean($('pa').value); const l = LINES.find(n => a.length > 3 && n.slice(0, 3) === a.slice(0, 3)); if (l) $('from').value = l; };
+const openD = () => { document.body.classList.add('open'); setTimeout(() => $('pa').focus(), 250); };
+const closeD = () => document.body.classList.remove('open');
+$('gear').onclick = openD; $('close').onclick = closeD; $('scrim').onclick = closeD;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeD(); });
+function say(t, ok){ $('gom').textContent = t; $('gom').className = 'msgline ' + (ok === undefined ? '' : ok ? 'ok' : 'err'); }
+$('go').onclick = async () => {
+  const a = clean($('pa').value), b = clean($('pb').value);
+  if (!a || !b) { say('Enter both numbers with their country code.', false); return; }
+  $('go').disabled = true; say('Placing the call…');
+  const q = new URLSearchParams({a, b, from: $('from').value});
+  let ok = false, d = {};
+  try { const r = await fetch(location.pathname.replace('/ui/', '/bridge/') + '?' + q); ok = r.ok; d = await r.json(); } catch (_) {}
+  say(ok ? `Ringing ${fmtN(a)}. When A answers, ${fmtN(b)} is rung and joined.` : (d.error || 'The call could not be placed.'), ok);
+  setTimeout(() => $('go').disabled = false, ok ? 10000 : 500);
+  if (ok) setTimeout(closeD, 1800);
+};
 const feed = document.getElementById('feed');
 const empty = document.getElementById('empty');
 const statusEl = document.getElementById('status');
@@ -219,6 +278,7 @@ function words(s){ return (s.match(/\S+/g) || []).length; }
 function tick(){ const s = Math.floor((Date.now() - startedAt) / 1000); timerEl.textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
 
 function onEvent(e){
+  if (e.type === 'bridge'){ $('mFrom').textContent = e.from; $('mTo').textContent = e.b; LABEL.inbound = 'Party A'; LABEL.outbound = 'Party B'; return; }
   if (e.type === 'call_started'){
     setStatus('live', 'Live call');
     document.getElementById('fmt').textContent = (e.format || '').replace('audio/x-','').replace('/', ' ');

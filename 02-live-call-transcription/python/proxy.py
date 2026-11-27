@@ -24,8 +24,10 @@ import base64
 import binascii
 import json
 import os
+import re
 import secrets
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -383,6 +385,52 @@ def _build_answer_xml(stream_url: str, forward_to: str, caller_id: str) -> bytes
     ).encode()
 
 
+# Numbers the page can call from (bridge calls): VOBIZ_AUTH_ID / _TOKEN / VOBIZ_PHONE_NUMBER, plus an
+# optional _2 set. Each number must belong to the account whose credentials sit next to it.
+def _lines() -> list[dict]:
+    lines = []
+    for suffix in ("", "_2", "_3"):
+        line = {k: os.getenv(f"VOBIZ_{k}{suffix}") for k in ("AUTH_ID", "AUTH_TOKEN", "PHONE_NUMBER")}
+        if all(line.values()):
+            lines.append(line)
+    return lines
+
+
+E164 = re.compile(r"\+[1-9]\d{7,14}")
+_LAST_BRIDGE = [0.0]
+
+
+def _bridge_call(a: str, b: str, from_number: str, base_url: str, answer_path: str, hangup_path: str) -> tuple[int, dict]:
+    """Call party A from `from_number`; when A answers, the answer XML dials B and bridges them."""
+    a, b = (re.sub(r"[\s().-]", "", x or "") for x in (a, b))
+    if not E164.fullmatch(a) or not E164.fullmatch(b):
+        return 400, {"error": "Use full numbers with country code, for example +447700900123."}
+    line = next((l for l in _lines() if l["PHONE_NUMBER"] == from_number), None)
+    if line is None:
+        return 400, {"error": "Pick a Vobiz number to call from."}
+    if time.time() - _LAST_BRIDGE[0] < 10:
+        return 429, {"error": "One call every 10 seconds. Try again shortly."}
+    _LAST_BRIDGE[0] = time.time()
+    query = urllib.parse.urlencode({"b": b, "cid": line["PHONE_NUMBER"]})
+    body = {"from": line["PHONE_NUMBER"], "to": a, "answer_url": f"{base_url}{answer_path}?{query}",
+            "answer_method": "GET", "hangup_url": base_url + hangup_path, "hangup_method": "GET",
+            "time_limit": MAX_CALL_SECONDS}
+    request = urllib.request.Request(
+        f"{VOBIZ_API_BASE}/Account/{line['AUTH_ID']}/Call/", method="POST", data=json.dumps(body).encode(),
+        headers={"X-Auth-ID": line["AUTH_ID"], "X-Auth-Token": line["AUTH_TOKEN"],
+                 "Content-Type": "application/json", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            data = json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        return 502, {"error": f"Vobiz returned {e.code}: {e.read().decode(errors='replace')[:200]}"}
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return 502, {"error": f"Could not reach Vobiz: {e}"}
+    print(f"[bridge] calling {a[:3]}…{a[-4:]} from {line['PHONE_NUMBER']}, then {b[:3]}…{b[-4:]}")
+    ui.publish({"type": "bridge", "a": a, "b": b, "from": line["PHONE_NUMBER"]})
+    return 200, {"ok": True, "request_uuid": data.get("request_uuid")}
+
+
 class VobizAPIError(RuntimeError):
     """Any failed Vobiz REST call: error status, network error or bad body."""
 
@@ -534,6 +582,8 @@ def make_process_request(
     ui_path: str | None = None,
     ui_body: bytes = b"",
     events_path: str | None = None,
+    wss_url: str = "",
+    base_url: str = "",
 ):
     """Build the HTTP router that runs before each WebSocket handshake.
 
@@ -542,7 +592,19 @@ def make_process_request(
     """
 
     async def process_request(path, _headers):
-        route = path.split("?", 1)[0]
+        route, _, qs = path.partition("?")
+        query = dict(urllib.parse.parse_qsl(qs))
+        if route == answer_path and query.get("b"):
+            # A bridge call from the page: dial party B with the caller ID it was placed from.
+            cids = {l["PHONE_NUMBER"] for l in _lines()}
+            if E164.fullmatch(query["b"]) and query.get("cid") in cids:
+                body = _build_answer_xml(wss_url, query["b"], query["cid"])
+                return HTTPStatus.OK, [("Content-Type", "application/xml"), ("Content-Length", str(len(body)))], body
+        if ui_path and route == ui_path.replace("/ui/", "/bridge/"):
+            status, data = await asyncio.to_thread(
+                _bridge_call, query.get("a"), query.get("b"), query.get("from"), base_url, answer_path, hangup_path)
+            payload = json.dumps(data).encode()
+            return HTTPStatus(status), [("Content-Type", "application/json"), ("Content-Length", str(len(payload)))], payload
         if route == answer_path:
             return (
                 HTTPStatus.OK,
@@ -599,7 +661,8 @@ async def main(argv: list[str] | None = None) -> None:
     wss_url = base_url.replace("https://", "wss://") + stream_path
     answer_body = _build_answer_xml(wss_url, FORWARD_TO_NUMBER, VOBIZ_PHONE_NUMBER)
     ui_path, events_path = f"/ui/{token}", f"/events/{token}"
-    ui_body = ui.page(events_path, VOBIZ_PHONE_NUMBER, FORWARD_TO_NUMBER, LANGUAGE)
+    ui_body = ui.page(events_path, VOBIZ_PHONE_NUMBER, FORWARD_TO_NUMBER, LANGUAGE,
+                      [l["PHONE_NUMBER"] for l in _lines()])
     previous_app = None
     if not args.call and not args.no_setup:
         try:
@@ -616,6 +679,8 @@ async def main(argv: list[str] | None = None) -> None:
         ui_path=ui_path,
         ui_body=ui_body,
         events_path=events_path,
+        wss_url=wss_url,
+        base_url=base_url,
     )
     async with websockets.serve(ws_handler, "localhost", PORT, process_request=process_request):
         print(f"\nListening on ws://localhost:{PORT}/vobiz/<token>")
