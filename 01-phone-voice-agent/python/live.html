@@ -2,165 +2,165 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Vobiz × Speechmatics · Phone voice agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Inter+Tight:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Inter+Tight:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  --bg:#ffffff; --bg2:#f7f8f8; --ink:#160c08; --muted:#6b6f72; --line:#e6e8e9;
-  --vz:#e8541e; --vz-soft:#fff3ec; --vz-line:#f7c9b2;
-  --sm:#1e3d49; --sm-green:#29a383; --sm-soft:#eef4f5; --sm-line:#cfdde1;
-  --console:#151110; --console2:#1e1917; --cline:#2c2522; --cink:#f3eeeb; --cmuted:#8d837e; --live:#3ccf8e;
+  --ink:#160c08; --ink2:#3b3431; --muted:#72767a; --line:#e7e9ea; --bg:#ffffff; --grey:#f6f7f7;
+  --vz:#e8541e; --vz-soft:#fff4ee; --vz-line:#f6cdb8;
+  --sm:#1e3d49; --sm-green:#29a383; --sm-soft:#edf4f4; --sm-line:#cddcdf;
   --sans:"DM Sans",system-ui,sans-serif; --display:"Inter Tight","DM Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
-body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(900px 420px at 50% 0,rgba(232,84,30,.06),transparent 70%)}
-header{position:relative;display:flex;align-items:center;gap:20px;padding:16px 36px;border-bottom:1px solid var(--line);background:#fff}
-header .logos{display:flex;align-items:center;gap:16px}
-header .logos img.vz{height:30px}
-header .logos img.sm{height:18px}
-header .logos .x{color:#b9b4b1;font-size:20px;font-weight:300}
-header .title{margin-left:10px;padding-left:20px;border-left:1px solid var(--line);font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:-.01em}
-header .title small{display:block;color:var(--muted);font-family:var(--sans);font-weight:400;font-size:13px;letter-spacing:0}
-.pill{margin-left:auto;display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:500;font-size:14px}
-.pill i{width:9px;height:9px;border-radius:50%;background:#c3c7c9}
-.pill.live{border-color:var(--sm);background:var(--sm);color:#fff}
-.pill.live i{background:var(--live);box-shadow:0 0 0 0 rgba(60,207,142,.6);animation:pulse 1.6s infinite}
-.pill .tm{font-family:var(--mono);opacity:.75}
-@keyframes pulse{70%{box-shadow:0 0 0 9px rgba(60,207,142,0)}100%{box-shadow:0 0 0 0 rgba(60,207,142,0)}}
-.chips{position:relative;display:flex;justify-content:center;gap:10px;padding:14px 36px 0;flex-wrap:wrap}
-.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);font-size:13.5px;color:#2b2523}
-.chip:before{content:"";width:0;height:0;border-left:7px solid var(--vz);border-top:7px solid transparent}
-.chip b{font-weight:600}
-main{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:22px;padding:16px 36px 30px;height:calc(100vh - 128px)}
-.h{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#2b2523}
-/* Speechmatics-style conversation card */
-#conv{display:flex;flex-direction:column;min-height:0;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:12px}
-#conv .top{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 12px}
-#conv .top .h{color:var(--sm)}
-#msgs{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:14px;background:#fff;border:1px solid var(--line);border-radius:10px;scroll-behavior:smooth}
-.msg{max-width:78%;display:flex;flex-direction:column;gap:5px;animation:in .25s ease-out}
-.msg .who{font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);display:flex;gap:8px;align-items:center}
-.msg .who .ms{font-family:var(--mono);letter-spacing:0;text-transform:none;color:var(--sm-green);font-weight:500}
-.msg .b{padding:12px 16px;border-radius:12px;font-size:17.5px;line-height:1.5}
-.msg.caller{align-self:flex-start}.msg.caller .who{color:var(--vz)}.msg.caller .b{background:var(--vz-soft);border:1px solid var(--vz-line);border-top-left-radius:3px}
-.msg.agent{align-self:flex-end;align-items:flex-end}.msg.agent .who{color:var(--sm)}.msg.agent .b{background:var(--sm-soft);border:1px solid var(--sm-line);border-top-right-radius:3px}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:22px;padding:0 40px;height:72px;border-bottom:1px solid var(--line);flex:none}
+.logos{display:flex;align-items:center;gap:14px}
+.logos .vz{height:28px}.logos .sm{height:17px}.logos .x{color:#c4bfbc;font-weight:300;font-size:18px}
+.title{padding-left:22px;border-left:1px solid var(--line);font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.01em}
+.status{margin-left:auto;display:flex;align-items:center;gap:10px;height:38px;padding:0 16px;border-radius:6px;border:1px solid var(--line);font-weight:500;font-size:14px;color:var(--ink2)}
+.status i{width:8px;height:8px;border-radius:50%;background:#c3c7c9}
+.status .tm{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.status.live{background:var(--sm);border-color:var(--sm);color:#fff}
+.status.live i{background:#4ade9c;animation:pulse 1.6s infinite}
+.status.live .tm{color:#b8cdd3}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(74,222,156,.6)}80%,100%{box-shadow:0 0 0 8px rgba(74,222,156,0)}}
+.hero{display:grid;grid-template-columns:1fr auto;align-items:end;gap:32px;padding:26px 40px 22px;flex:none;background:linear-gradient(180deg,#fff,#fff 40%,var(--grey));border-bottom:1px solid var(--line)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--vz)}
+.eyebrow:before{content:"";border-left:7px solid var(--vz);border-top:7px solid transparent}
+.bignum{font-family:var(--display);font-weight:600;font-size:46px;letter-spacing:-.02em;line-height:1.1;margin-top:6px}
+.sub{color:var(--muted);margin-top:6px;font-size:14.5px}
+.sub b{color:var(--ink2);font-weight:500}
+.tiles{display:flex;gap:12px}
+.tile{width:178px;padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:10px}
+.tile .l{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font-family:var(--mono);font-size:30px;font-weight:500;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.tile .v small{font-size:14px;color:var(--muted);margin-left:3px}
+.tile.accent{border-color:var(--sm);background:var(--sm)}
+.tile.accent .l{color:#a9c2c9}.tile.accent .v{color:#fff}.tile.accent .v small{color:#a9c2c9}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;padding:22px 40px 26px}
+.panel{background:var(--grey);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;min-height:0}
+.ptop{display:flex;align-items:center;justify-content:space-between;padding:6px 10px 10px}
+.plabel{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sm)}
+.pmeta{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.inner{flex:1;min-height:0;background:#fff;border:1px solid var(--line);border-radius:8px}
+#msgs{height:100%;overflow-y:auto;padding:26px 28px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+.msg{max-width:74%;display:flex;flex-direction:column;gap:6px;animation:in .22s ease-out}
+.who{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase}
+.who .ms{font-family:var(--mono);font-weight:500;letter-spacing:0;text-transform:none;font-size:12px;padding:1px 7px;border-radius:5px;background:var(--sm-soft);color:var(--sm)}
+.b{padding:13px 18px;border-radius:10px;font-size:19px;line-height:1.5}
+.msg.caller .who{color:var(--vz)} .msg.caller .b{background:var(--vz-soft);border:1px solid var(--vz-line);border-top-left-radius:2px}
+.msg.agent{align-self:flex-end;align-items:flex-end} .msg.agent .who{color:var(--sm)} .msg.agent .b{background:var(--sm-soft);border:1px solid var(--sm-line);border-top-right-radius:2px}
 .msg.partial .b{color:var(--muted);font-style:italic}
-.note{align-self:center;font-size:12.5px;color:var(--muted);font-family:var(--mono);padding:4px 12px;border:1px dashed #d4d7d9;border-radius:7px}
+.note{align-self:center;font-family:var(--mono);font-size:12.5px;color:var(--muted);padding:4px 12px;border:1px dashed #d6d9da;border-radius:6px}
 .note.warn{color:var(--vz);border-color:var(--vz-line);background:var(--vz-soft)}
-.empty{margin:auto;text-align:center;color:var(--muted);max-width:440px}
-.empty h2{color:var(--ink);font-family:var(--display);font-size:26px;letter-spacing:-.02em;margin:0 0 8px;font-weight:600}
 @keyframes in{from{opacity:0;transform:translateY(6px)}}
-/* Vobiz-style console panel */
-aside{display:flex;flex-direction:column;min-height:0;background:var(--console);color:var(--cink);border-radius:16px;box-shadow:0 30px 60px -30px rgba(80,30,10,.45);overflow:hidden}
-aside .bar{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cline)}
-aside .bar img{height:16px}
-aside .bar span{font-size:14px;color:var(--cmuted)}
-aside .bar .lv{margin-left:auto;font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;color:var(--live);display:flex;align-items:center;gap:7px}
-aside .bar .lv:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--live)}
-aside .bar .lv.off{color:var(--cmuted)} aside .bar .lv.off:before{background:var(--cmuted)}
-aside .sec{padding:16px 18px;border-bottom:1px solid var(--cline)}
-aside .lbl{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--cmuted)}
-.num{font-family:var(--mono);font-size:25px;font-weight:500;margin-top:8px;color:#fff}
-.num-sub{color:var(--cmuted);font-size:12.5px;margin-top:4px}
-.lat{display:flex;align-items:baseline;gap:8px;margin-top:6px}
-.lat .v{font-family:var(--mono);font-size:42px;font-weight:500;color:#fff;font-variant-numeric:tabular-nums}
-.lat .u{color:var(--cmuted);font-family:var(--mono)}
-.lat-sub{display:flex;gap:18px;color:var(--cmuted);font-size:13px;margin-top:2px}
-.lat-sub b{color:#fff;font-family:var(--mono);font-weight:500}
-#bars{display:flex;align-items:flex-end;gap:5px;height:44px;margin-top:12px}
-#bars i{flex:1;max-width:20px;background:var(--vz);border-radius:3px 3px 1px 1px}
-.pipe{display:flex;flex-direction:column;margin-top:6px}
-.stage{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--cline)}
-.stage:last-child{border-bottom:0}
-.stage .dot{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:12.5px;font-weight:600;color:#fff;font-family:var(--mono)}
-.stage .n{font-size:14.5px}.stage .d{font-size:12.5px;color:var(--cmuted)}
-.stage .st{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--cmuted)}
-.stage.on .st{color:var(--live)} .stage.on .st:before{content:"● "}
-#log{font-family:var(--mono);font-size:11.5px;color:var(--cmuted);display:flex;flex-direction:column;gap:4px;max-height:130px;overflow-y:auto;margin-top:8px}
-#log span b{color:var(--cink);font-weight:500}
-aside .grow{flex:1;overflow-y:auto}
+.empty{margin:auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;color:var(--muted)}
+.ring{position:relative;width:84px;height:84px;border-radius:50%;background:var(--vz-soft);display:grid;place-items:center}
+.ring:before,.ring:after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--vz);opacity:0;animation:ring 2.4s infinite}
+.ring:after{animation-delay:1.2s}
+@keyframes ring{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.7);opacity:0}}
+.empty h2{margin:6px 0 0;font-family:var(--display);font-weight:600;font-size:26px;letter-spacing:-.02em;color:var(--ink)}
+.empty p{margin:0;max-width:420px;font-size:15.5px}
+.side{display:flex;flex-direction:column;gap:16px;min-height:0}
+.flow{padding:18px 18px 8px;flex:none}
+.step{position:relative;display:flex;gap:14px;padding-bottom:18px}
+.step:not(:last-child):before{content:"";position:absolute;left:17px;top:38px;bottom:2px;width:2px;background:var(--line)}
+.step .ic{flex:none;width:36px;height:36px;border-radius:8px;display:grid;place-items:center;border:1px solid var(--line);background:#fff;font-family:var(--mono);font-weight:500;font-size:13px;color:var(--muted);transition:all .2s}
+.step .t{font-weight:600;font-size:15px;line-height:1.3}
+.step .d{font-size:13px;color:var(--muted);margin-top:2px}
+.step .tag{display:inline-block;margin-top:6px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.step.on .ic{color:#fff;border-color:transparent}
+.step.on .tag{color:var(--sm-green)} .step.on .tag:before{content:"● "}
+#st-vobiz.on .ic{background:var(--vz)} #st-stt.on .ic{background:var(--sm-green)} #st-llm.on .ic,#st-tts.on .ic{background:var(--sm)}
+.events{flex:1;min-height:0}
+#log{height:100%;overflow-y:auto;padding:12px 16px;font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+#log span b{color:var(--ink2);font-weight:500;margin-right:6px}
 </style></head>
 <body>
 <header>
   <div class="logos"><img class="vz" src="/assets/vobiz-light.png" alt="Vobiz"><span class="x">×</span><img class="sm" src="/assets/speechmatics-black.png" alt="Speechmatics"></div>
-  <div class="title">Phone voice agent<small>Speechmatics speech to text on a real Vobiz phone number</small></div>
-  <div class="pill" id="pill"><i></i><span id="status">Waiting for a call</span><span class="tm" id="timer"></span></div>
+  <div class="title">Phone voice agent</div>
+  <div class="status" id="pill"><i></i><span id="status">Waiting for a call</span><span class="tm" id="timer"></span></div>
 </header>
-<div class="chips"><span class="chip"><b>Speechmatics</b>&nbsp;Agent STT · Linden 1</span><span class="chip" id="chip-llm">LLM</span><span class="chip">Vobiz&nbsp;<b>real-time audio streaming</b></span></div>
+<section class="hero">
+  <div>
+    <div class="eyebrow">Call the agent</div>
+    <div class="bignum" id="number">—</div>
+    <div class="sub">A real phone line on <b>Vobiz</b> · speech to text by <b>Speechmatics</b> · reply and voice by <b id="engine">—</b></div>
+  </div>
+  <div class="tiles">
+    <div class="tile accent"><div class="l">Last reply</div><div class="v"><span id="latv">—</span><small>ms</small></div></div>
+    <div class="tile"><div class="l">Average</div><div class="v"><span id="lata">—</span><small>ms</small></div></div>
+    <div class="tile"><div class="l">Turns</div><div class="v" id="turnsN">0</div></div>
+  </div>
+</section>
 <main>
-  <section class="card" id="conv">
-    <div class="top"><span class="h">Conversation</span><span class="h" id="turns">0 turns</span></div>
-    <div id="msgs"><div class="empty" id="empty"><h2>Call the number to start</h2>The caller's words and the agent's replies appear here as the call happens.</div></div>
+  <section class="panel">
+    <div class="ptop"><span class="plabel">Live conversation</span><span class="pmeta">latency = end of caller's turn → first agent audio</span></div>
+    <div class="inner"><div id="msgs"></div></div>
   </section>
-  <aside>
-    <div class="bar"><img src="/assets/vobiz-dark.png" alt="Vobiz"><span>Call console</span><span class="lv off" id="lv">IDLE</span></div>
-    <div class="sec"><div class="lbl">Call this number</div><div class="num" id="number">—</div><div class="num-sub">A real phone line on Vobiz</div></div>
-    <div class="sec"><div class="lbl">Response latency</div>
-      <div class="lat"><span class="v" id="latv">—</span><span class="u">ms</span></div>
-      <div class="lat-sub"><span>Average <b id="lata">—</b></span><span>Best <b id="latb">—</b></span></div>
-      <div class="num-sub">End of the caller's turn to the agent's first audio</div>
-      <div id="bars"></div>
-    </div>
-    <div class="sec"><div class="lbl">Pipeline</div>
-      <div class="pipe">
-        <div class="stage vz" id="st-vobiz"><div class="dot" style="background:var(--vz)">V</div><div><div class="n">Vobiz number</div><div class="d">Takes the call, streams the audio</div></div><span class="st">STREAMING</span></div>
-        <div class="stage" id="st-stt"><div class="dot" style="background:var(--sm-green)">S</div><div><div class="n">Speechmatics Agent STT</div><div class="d" id="sttd">Hears the caller, detects end of turn</div></div><span class="st">LISTENING</span></div>
-        <div class="stage" id="st-llm"><div class="dot" style="background:#4a6b78">L</div><div><div class="n" id="llmn">LLM</div><div class="d" id="llmd">—</div></div><span class="st">THINKING</span></div>
-        <div class="stage" id="st-tts"><div class="dot" style="background:#c98a2a">T</div><div><div class="n">Voice</div><div class="d" id="ttsd">—</div></div><span class="st">SPEAKING</span></div>
+  <div class="side">
+    <section class="panel" style="flex:none">
+      <div class="ptop"><span class="plabel">Pipeline</span><span class="pmeta" id="region"></span></div>
+      <div class="inner flow">
+        <div class="step" id="st-vobiz"><div class="ic">V</div><div><div class="t">Vobiz number</div><div class="d">Answers the call and streams the audio</div><span class="tag">Streaming</span></div></div>
+        <div class="step" id="st-stt"><div class="ic">S</div><div><div class="t">Speechmatics Agent STT</div><div class="d">Hears the caller, detects the end of each turn</div><span class="tag">Listening</span></div></div>
+        <div class="step" id="st-llm"><div class="ic">G</div><div><div class="t" id="llmn">Language model</div><div class="d" id="llmd">—</div><span class="tag">Thinking</span></div></div>
+        <div class="step" id="st-tts"><div class="ic">♪</div><div><div class="t">Voice</div><div class="d" id="ttsd">—</div><span class="tag">Speaking</span></div></div>
       </div>
-    </div>
-    <div class="sec grow"><div class="lbl">Agent events</div><div id="log"></div></div>
-  </aside>
+    </section>
+    <section class="panel events">
+      <div class="ptop"><span class="plabel">Agent events</span></div>
+      <div class="inner"><div id="log"></div></div>
+    </section>
+  </div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-const msgs = $("msgs"); let partialEl = null, callStart = null, lats = [], turns = 0, live = false;
+const msgs = $("msgs"); let partialEl = null, callStart = null, lats = [], turns = 0, live = false, number = "", gl = false;
+const EMPTY = () => `<div class="empty"><div class="ring"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#e8541e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.8 2z"/></svg></div><h2>Waiting for a call</h2><p>Call ${number || "the number above"} and the conversation appears here as it happens.</p></div>`;
 function fmtNum(n){ if(!n) return "—"; let m;
   if ((m = n.match(/^\+44(20)(\d{4})(\d{4})$/))) return `+44 ${m[1]} ${m[2]} ${m[3]}`;
   if ((m = n.match(/^\+44(\d{4})(\d{6})$/))) return `+44 ${m[1]} ${m[2]}`;
   if ((m = n.match(/^\+91(\d{5})(\d{5})$/))) return `+91 ${m[1]} ${m[2]}`;
   return n; }
-function clearEmpty(){ const e = $("empty"); if (e) e.remove(); }
-function add(cls, who, text, extra){
-  clearEmpty();
-  const d = document.createElement("div"); d.className = "msg " + cls;
-  d.innerHTML = `<div class="who">${who}${extra||""}</div><div class="b"></div>`; d.querySelector(".b").textContent = text;
-  msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d;
-}
+function clearEmpty(){ const e = msgs.querySelector(".empty"); if (e) e.remove(); }
+function add(cls, who, text){ clearEmpty(); const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = `<div class="who">${who}</div><div class="b"></div>`; d.querySelector(".b").textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
 function note(text, warn){ clearEmpty(); const d = document.createElement("div"); d.className = "note" + (warn ? " warn" : ""); d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
-function stage(name){ ["vobiz","stt","llm","tts"].forEach(s => $("st-"+s).classList.toggle("on", s === name)); }
-function logLine(kind, text){ const l = $("log"); const s = document.createElement("span"); s.innerHTML = `<b>${kind}</b> ${text.replace(/</g,"&lt;")}`; l.prepend(s); while (l.children.length > 40) l.lastChild.remove(); }
-function drawLat(){
-  if (!lats.length) return;
-  $("latv").textContent = lats[lats.length-1]; $("lata").textContent = Math.round(lats.reduce((a,b)=>a+b,0)/lats.length) + " ms"; $("latb").textContent = Math.min(...lats) + " ms";
-  const max = Math.max(...lats, 1); $("bars").innerHTML = lats.slice(-14).map(v => `<i style="height:${Math.max(8, 56*v/max)}px" title="${v} ms"></i>`).join("");
-}
-function reset(){ msgs.innerHTML = ""; partialEl = null; lats = []; turns = 0; $("turns").textContent = "0 turns"; $("latv").textContent = "—"; $("lata").textContent = "—"; $("latb").textContent = "—"; $("bars").innerHTML = ""; $("log").innerHTML = ""; }
-function setLive(on, label){ live = on; $("pill").classList.toggle("live", on); $("status").textContent = label; const lv = $("lv"); lv.textContent = on ? "LIVE" : "IDLE"; lv.classList.toggle("off", !on); if (!on) { stage(null); } }
+function stage(name){ ["vobiz","stt","llm","tts"].forEach(s => $("st-"+s).classList.toggle("on", s === name || (name === "speak-gl" && (s === "llm" || s === "tts")))); }
+function logLine(kind, text){ const l = $("log"); const s = document.createElement("span"); s.innerHTML = `<b>${kind}</b>${text.replace(/</g,"&lt;")}`; l.prepend(s); while (l.children.length > 40) l.lastChild.remove(); }
+function drawLat(){ if (!lats.length) return; $("latv").textContent = lats[lats.length-1]; $("lata").textContent = Math.round(lats.reduce((a,b)=>a+b,0)/lats.length); }
+function reset(){ msgs.innerHTML = EMPTY(); partialEl = null; lats = []; turns = 0; $("turnsN").textContent = "0"; $("latv").textContent = "—"; $("lata").textContent = "—"; $("log").innerHTML = ""; }
+function setLive(on, label){ live = on; $("pill").classList.toggle("live", on); $("status").textContent = label; if (!on) { stage(null); $("timer").textContent = ""; } }
 setInterval(() => { if (live && callStart) { const s = Math.floor(Date.now()/1000 - callStart); $("timer").textContent = String(Math.floor(s/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0"); } }, 500);
-
 function handle(e){
   const k = e.kind, t = e.text || "";
-  if (k === "CONFIG") { reset(); $("number").textContent = fmtNum(e.number); $("llmd").textContent = e.llm; const gl = e.tts === "Gemini Live"; $("llmn").textContent = gl ? "Gemini Live" : "LLM"; $("ttsd").textContent = gl ? "Same Gemini Live connection, native audio" : e.tts + " text to speech"; $("chip-llm").innerHTML = gl ? "<b>Gemini Live</b>&nbsp;reply and voice in one step" : "<b>" + e.llm + "</b>&nbsp;+ " + e.tts; return; }
+  if (k === "CONFIG") { number = fmtNum(e.number); reset(); $("number").textContent = number; gl = e.tts === "Gemini Live";
+    $("engine").textContent = gl ? "Gemini Live" : `${e.llm} + ${e.tts}`; $("llmn").textContent = gl ? "Gemini Live" : "Language model";
+    $("llmd").textContent = gl ? `${e.llm} · writes the reply` : e.llm; $("ttsd").textContent = gl ? "Same Gemini Live connection, native audio" : `${e.tts} text to speech`;
+    $("region").textContent = /us\.rt/.test(e.stt_url || "") ? "STT region: US" : ""; return; }
   if (k === "CALL") {
-    if (t.startsWith("started")) { reset(); callStart = e.t; setLive(true, "On a call"); stage("vobiz"); note("Call connected"); }
+    if (t.startsWith("started")) { reset(); clearEmpty(); callStart = e.t; setLive(true, "On a call"); stage("vobiz"); note("Call connected"); }
     else if (t.startsWith("ended")) { setLive(false, "Call ended"); note("Call ended"); }
-    else { note(t); }
-    logLine(k, t); return;
-  }
-  if (k === "PARTIAL") { if (!live) return; stage("stt"); if (!partialEl) partialEl = add("caller partial", "Caller · speaking", t); else partialEl.querySelector(".b").textContent = t; return; }
-  if (k === "CALLER") { if (partialEl) { partialEl.remove(); partialEl = null; } add("caller", "Caller", t); turns++; $("turns").textContent = turns + (turns === 1 ? " turn" : " turns"); stage("llm"); return; }
-  if (k === "AGENT") { if (partialEl) { partialEl.remove(); partialEl = null; } const last = msgs.lastElementChild; if (last && last.classList.contains("agent") && !last.dataset.closed) { last.querySelector(".b").textContent += " " + t; } else { add("agent", "Agent", t); } stage("tts"); return; }
-  if (k === "LATENCY") { const m = t.match(/(\d+)\s*ms/); if (m) { lats.push(+m[1]); drawLat(); const a = [...msgs.querySelectorAll(".msg.agent")].pop(); if (a && !a.querySelector(".ms")) a.querySelector(".who").insertAdjacentHTML("beforeend", `<span class="ms">${m[1]} ms</span>`); } return; }
+    else note(t);
+    logLine(k, t); return; }
+  if (k === "PARTIAL") { if (!live) return; stage("stt"); if (!partialEl) partialEl = add("caller partial", "Caller · speaking", t); else partialEl.querySelector(".b").textContent = t; msgs.scrollTop = msgs.scrollHeight; return; }
+  if (k === "CALLER") { if (partialEl) { partialEl.remove(); partialEl = null; } add("caller", "Caller", t); turns++; $("turnsN").textContent = turns; stage("llm"); return; }
+  if (k === "AGENT") { if (partialEl) { partialEl.remove(); partialEl = null; } const last = msgs.lastElementChild;
+    if (last && last.classList.contains("agent") && !last.dataset.closed) last.querySelector(".b").textContent += " " + t; else add("agent", "Agent", t);
+    stage(gl ? "speak-gl" : "tts"); return; }
+  if (k === "LATENCY") { const m = t.match(/(\d+)\s*ms/); if (!m) return; lats.push(+m[1]); drawLat();
+    const a = [...msgs.querySelectorAll(".msg.agent")].pop(); if (a && !a.querySelector(".ms")) a.querySelector(".who").insertAdjacentHTML("beforeend", `<span class="ms">${m[1]} ms</span>`); return; }
   if (k === "BARGE-IN" || k === "TURN") { note("Caller cut in · reply dropped", true); const a = [...msgs.querySelectorAll(".msg.agent")].pop(); if (a) a.dataset.closed = 1; logLine(k, t); return; }
-  if (k === "PAUSE" || k === "RESUME") { logLine(k, t); return; }
-  if (["STT","TTS","LLM","DTMF","HTTP"].includes(k)) { logLine(k, t); if (k === "DTMF") note(t); return; }
+  if (["PAUSE","RESUME","STT","TTS","LLM","DTMF","HTTP"].includes(k)) { logLine(k, t); if (k === "DTMF") note(t); }
 }
 function connect(){
-  const es = new EventSource(location.pathname.replace("/live/", "/events/"));
-  es.onmessage = (m) => handle(JSON.parse(m.data));
-  es.onerror = () => { es.close(); setTimeout(connect, 2000); };
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(proto + "//" + location.host + location.pathname.replace("/live/", "/events/"));
+  ws.onmessage = (m) => handle(JSON.parse(m.data));
+  ws.onclose = () => setTimeout(connect, 2000);
 }
+msgs.innerHTML = EMPTY();
 connect();
 </script>
 </body></html>

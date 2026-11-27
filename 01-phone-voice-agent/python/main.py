@@ -750,29 +750,29 @@ async def live_page(_request: web.Request) -> web.Response:
     return web.Response(text=html, content_type="text/html")
 
 
-async def live_events(request: web.Request) -> web.StreamResponse:
-    """Server-sent events for the live page: config first, then recent and new events."""
-    response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache",
-                                           "X-Accel-Buffering": "no"})
-    await response.prepare(request)
-    config = {"kind": "CONFIG", "number": DEMO_NUMBER, "llm": GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL, "tts": TTS_NAME,
-              "stt": "Speechmatics Agent STT", "stt_url": SM_RT_URL or "default (EU)"}
+async def live_events(request: web.Request) -> web.WebSocketResponse:
+    """WebSocket for the live page: config first, then recent and new events.
+
+    A WebSocket rather than server-sent events, so tunnels and proxies that buffer
+    responses still deliver each event at once.
+    """
+    ws = web.WebSocketResponse(heartbeat=20)
+    await ws.prepare(request)
+    config = {"kind": "CONFIG", "number": DEMO_NUMBER, "llm": GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL,
+              "tts": TTS_NAME, "stt": "Speechmatics Agent STT", "stt_url": SM_RT_URL or "default (EU)"}
     queue: asyncio.Queue = asyncio.Queue()
     LISTENERS.add(queue)
     try:
         for event in [config, *EVENTS]:
-            await response.write(f"data: {json.dumps(event)}\n\n".encode())
-        while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=15)
-                await response.write(f"data: {json.dumps(event)}\n\n".encode())
-            except asyncio.TimeoutError:
-                await response.write(b": keepalive\n\n")
+            await ws.send_str(json.dumps(event))
+        while not ws.closed:
+            event = await queue.get()
+            await ws.send_str(json.dumps(event))
     except (ConnectionResetError, asyncio.CancelledError):
         pass
     finally:
         LISTENERS.discard(queue)
-    return response
+    return ws
 
 
 async def on_startup(app: web.Application) -> None:
