@@ -487,6 +487,7 @@ class Call:
                 log(f"TTS       Gradium error: {e2 or e}")
                 return
         self.gr_next = self.spawn(self.gradium_socket())
+        turn_at = self.turn_ended_at  # latency counts only for a reply to this turn
         sentence = Sentence(text)
         self.sentences.append(sentence)
         try:
@@ -497,8 +498,8 @@ class Call:
                     break
                 msg = json.loads(m.data)
                 if msg.get("type") == "audio":
-                    if self.turn_ended_at:
-                        elapsed_ms = (time.time() - self.turn_ended_at) * 1000
+                    if turn_at and self.turn_ended_at == turn_at:
+                        elapsed_ms = (time.time() - turn_at) * 1000
                         log(f"LATENCY   end of caller turn -> first agent audio: {elapsed_ms:.0f} ms")
                         self.turn_ended_at = 0.0
                     sentence.pcm += base64.b64decode(msg["audio"])
@@ -524,6 +525,7 @@ class Call:
             return
         sentence = Sentence(text)
         self.sentences.append(sentence)
+        turn_at = self.turn_ended_at
         first = True
         carry = b""
         try:
@@ -531,8 +533,8 @@ class Call:
                 log(f"TTS       {TTS_NAME} error", response.status, (await response.text())[:300])
                 return
             async for chunk in response.content.iter_chunked(CHUNK):
-                if first and self.turn_ended_at:
-                    elapsed_ms = (time.time() - self.turn_ended_at) * 1000
+                if first and turn_at and self.turn_ended_at == turn_at:
+                    elapsed_ms = (time.time() - turn_at) * 1000
                     log(f"LATENCY   end of caller turn -> first agent audio: {elapsed_ms:.0f} ms")
                     self.turn_ended_at = 0.0
                 first = False
