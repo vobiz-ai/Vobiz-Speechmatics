@@ -110,10 +110,18 @@ PLAYBACK_MARGIN_SECONDS = 0.3
 HANGUP_TOKEN = "[END_CALL]"
 PROMPT_FILE = Path(__file__).resolve().parent.parent / "assets" / "agent.md"
 TTS_NAME = TTS_NAMES.get(TTS_PROVIDER, TTS_PROVIDER)
-GREETING = (
-    "Hi, I'm Vee, the Vobiz voice assistant. I'm listening with Speechmatics speech to text "
-    f"and talking with {TTS_NAME} text to speech. What would you like to know?"
-)
+
+
+def greeting_text() -> str:
+    return (
+        "Hi, I'm Vee, the Vobiz voice assistant. I'm listening with Speechmatics speech to text "
+        f"and talking with {TTS_NAME} text to speech. What would you like to know?"
+    )
+
+
+GREETING = greeting_text()
+# State that changes while the server runs: the prompt and the cached greeting audio.
+STATE: dict = {}
 
 # Custom dictionary: brand names agent STT should spell correctly. `sounds_like`
 # lists how callers actually say them, including mishearings seen in test calls.
@@ -191,7 +199,7 @@ class Call:
         self.tts: tts.AsyncClient = app["tts"]
         self.stt: AgentSttAsyncClient | None = None
         self.stream_id: str | None = None
-        self.history: list[dict] = [{"role": "system", "content": app["prompt"]}]
+        self.history: list[dict] = [{"role": "system", "content": STATE["prompt"]}]
         self.turn_text: list[str] = []
         self.reply_task: asyncio.Task | None = None
         self.tasks: set[asyncio.Task] = set()
@@ -209,7 +217,7 @@ class Call:
         self.resume_task: asyncio.Task | None = None
         self.send_lock = asyncio.Lock()  # keeps playAudio in order across tasks
         # Gemini Live (TTS_PROVIDER=gemini-live)
-        self.prompt: str = app["prompt"]
+        self.prompt: str = STATE["prompt"]
         self.app = app
         self.started = False
         self.gl_cm = None
@@ -705,14 +713,14 @@ class Call:
         log(f"AGENT     {GREETING}")
         self.history.append({"role": "assistant", "content": GREETING})
         self.start_speech()
-        cached = self.app.get("greeting_pcm")
+        cached = STATE.get("greeting_pcm")
         if cached:
             # Synthesized once at startup: the caller hears the first word immediately.
             self.sentences.append(Sentence(GREETING, pcm=bytearray(cached), complete=True))
         else:
             await self.speak(GREETING)
             if self.sentences and self.sentences[-1].complete and self.sentences[-1].pcm:
-                self.app["greeting_pcm"] = bytes(self.sentences[-1].pcm)
+                STATE["greeting_pcm"] = bytes(self.sentences[-1].pcm)
         self.speech_done = True
         await self.flush()
 
@@ -838,8 +846,7 @@ async def live_events(request: web.Request) -> web.WebSocketResponse:
     """
     ws = web.WebSocketResponse(heartbeat=20)
     await ws.prepare(request)
-    config = {"kind": "CONFIG", "number": DEMO_NUMBER, "llm": GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL,
-              "tts": TTS_NAME, "stt": "Speechmatics Agent STT", "stt_url": SM_RT_URL or "default (EU)"}
+    config = config_event("CONFIG")
     queue: asyncio.Queue = asyncio.Queue()
     LISTENERS.add(queue)
     try:
@@ -853,6 +860,186 @@ async def live_events(request: web.Request) -> web.WebSocketResponse:
     finally:
         LISTENERS.discard(queue)
     return ws
+
+
+def config_event(kind: str) -> dict:
+    """What the live page shows about the pipeline."""
+    return {"kind": kind, "number": DEMO_NUMBER, "llm": GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL,
+            "tts": TTS_NAME, "stt": "Speechmatics Agent STT", "stt_url": SM_RT_URL or "default (EU)"}
+
+
+# ---------- settings and outbound calls from the live page ----------
+LLM_CHOICES = list(dict.fromkeys([LLM_MODEL, "gemini-3.5-flash-lite", "gemini-3.1-flash-lite",
+                                  "gemini-3.6-flash", "gemini-3.7-flash"]))
+SM_VOICES = ["sarah", "theo", "megan", "jack"]
+
+# Numbers the page can call out from: VOBIZ_AUTH_ID / _TOKEN / _FROM_NUMBER, plus optional _2 and _3 sets
+# (each number must belong to the account whose credentials sit next to it).
+LINES = []
+for _suffix in ("", "_2", "_3"):
+    _line = {k: os.getenv(f"VOBIZ_{k.upper()}{_suffix}") for k in ("auth_id", "auth_token", "from_number")}
+    if all(_line.values()):
+        LINES.append(_line)
+
+
+def tts_choices() -> dict:
+    """Voice providers whose API key is set, with models and voices to pick from."""
+    def opts(*items):
+        return list(dict.fromkeys(i for i in items if i))
+    choices = {"speechmatics": {"name": "Speechmatics", "models": ["speechmatics-tts"], "voices": SM_VOICES}}
+    if GRADIUM_API_KEY:
+        choices["gradium"] = {"name": "Gradium", "models": opts(GRADIUM_MODEL), "voices": opts(GRADIUM_VOICE_ID)}
+    if CARTESIA_API_KEY:
+        choices["cartesia"] = {"name": "Cartesia", "models": opts(CARTESIA_MODEL, "sonic-3.6", "sonic-3"),
+                               "voices": opts(CARTESIA_VOICE_ID)}
+    if ELEVENLABS_API_KEY:
+        choices["elevenlabs"] = {"name": "ElevenLabs", "models": opts(ELEVENLABS_MODEL, "eleven_flash_v2_5", "eleven_turbo_v2_5"),
+                                 "voices": opts(ELEVENLABS_VOICE_ID)}
+    if os.getenv("GEMINI_API_KEY"):
+        choices["gemini-live"] = {"name": "Gemini Live (LLM + voice in one)",
+                                  "models": opts(GEMINI_LIVE_MODEL, "gemini-3.8-live", "gemini-3.1-flash-live"),
+                                  "voices": opts(GEMINI_VOICE, "Aoede", "Puck", "Kore", "Charon", "Fenrir")}
+    return choices
+
+
+def current_settings() -> dict:
+    model = {"gemini-live": GEMINI_LIVE_MODEL, "gradium": GRADIUM_MODEL, "cartesia": CARTESIA_MODEL,
+             "elevenlabs": ELEVENLABS_MODEL}.get(TTS_PROVIDER, "speechmatics-tts")
+    voice = {"gemini-live": GEMINI_VOICE, "gradium": GRADIUM_VOICE_ID, "cartesia": CARTESIA_VOICE_ID,
+             "elevenlabs": ELEVENLABS_VOICE_ID}.get(TTS_PROVIDER, SM_VOICE.value)
+    return {"llm": LLM_MODEL, "tts": TTS_PROVIDER, "tts_model": model, "voice": voice}
+
+
+async def probe_settings(http: aiohttp.ClientSession, s: dict) -> str | None:
+    """Try the chosen LLM and voice once; return an error message, or None when both answer."""
+    t = aiohttp.ClientTimeout(total=15)
+    try:
+        if s["tts"] != "gemini-live":
+            body = {"model": s["llm"], "messages": [{"role": "user", "content": "Say hi."}], "max_completion_tokens": 5}
+            if LLM_REASONING_EFFORT:
+                body["reasoning_effort"] = LLM_REASONING_EFFORT
+            async with http.post(LLM_URL, json=body, headers={"Authorization": f"Bearer {LLM_API_KEY}"}, timeout=t) as r:
+                if r.status != 200:
+                    return f"LLM {s['llm']}: {r.status} {(await r.text())[:160]}"
+        if s["tts"] == "gradium":
+            ws = await http.ws_connect(GRADIUM_URL, headers={"x-api-key": GRADIUM_API_KEY})
+            await ws.send_str(json.dumps({"type": "setup", "model_name": s["tts_model"], "voice_id": s["voice"],
+                                          "output_format": "pcm_16000"}))
+            msg = await ws.receive_json(timeout=10)
+            await ws.close()
+            if msg.get("type") != "ready":
+                return f"Gradium: {msg}"
+        elif s["tts"] == "cartesia":
+            async with http.post("https://api.cartesia.ai/tts/bytes", timeout=t,
+                                 headers={"Authorization": f"Bearer {CARTESIA_API_KEY}", "Cartesia-Version": CARTESIA_VERSION},
+                                 json={"model_id": s["tts_model"], "transcript": "Hi.", "voice": {"id": s["voice"]},
+                                       "output_format": {"container": "raw", "encoding": "pcm_s16le", "sample_rate": RATE}}) as r:
+                if r.status != 200:
+                    return f"Cartesia: {r.status} {(await r.text())[:160]}"
+        elif s["tts"] == "elevenlabs":
+            async with http.post(f"https://api.elevenlabs.io/v1/text-to-speech/{s['voice']}/stream", timeout=t,
+                                 params={"output_format": f"pcm_{RATE}"}, headers={"xi-api-key": ELEVENLABS_API_KEY},
+                                 json={"text": "Hi.", "model_id": s["tts_model"]}) as r:
+                if r.status != 200:
+                    return f"ElevenLabs: {r.status} {(await r.text())[:160]}"
+    except Exception as e:  # noqa: BLE001 - reported to the page
+        return f"{type(e).__name__}: {e}"
+    return None
+
+
+def apply_settings(s: dict) -> None:
+    """Switch the LLM and voice for the next call."""
+    global TTS_PROVIDER, GEMINI_LIVE, GEMINI_LIVE_MODEL, GEMINI_VOICE, GRADIUM_MODEL, GRADIUM_VOICE_ID
+    global CARTESIA_MODEL, CARTESIA_VOICE_ID, ELEVENLABS_MODEL, ELEVENLABS_VOICE_ID, SM_VOICE, LLM_MODEL
+    global OUT_RATE, OUT_CHUNK, TTS_NAME, GREETING
+    TTS_PROVIDER, LLM_MODEL, model, voice = s["tts"], s["llm"], s["tts_model"], s["voice"]
+    if TTS_PROVIDER == "gemini-live":
+        GEMINI_LIVE_MODEL, GEMINI_VOICE = model, voice
+    elif TTS_PROVIDER == "gradium":
+        GRADIUM_MODEL, GRADIUM_VOICE_ID = model, voice
+    elif TTS_PROVIDER == "cartesia":
+        CARTESIA_MODEL, CARTESIA_VOICE_ID = model, voice
+    elif TTS_PROVIDER == "elevenlabs":
+        ELEVENLABS_MODEL, ELEVENLABS_VOICE_ID = model, voice
+    else:
+        SM_VOICE = tts.Voice(voice)
+    GEMINI_LIVE = TTS_PROVIDER == "gemini-live"
+    OUT_RATE = 24000 if GEMINI_LIVE else RATE
+    OUT_CHUNK = OUT_RATE * 2 * 60 // 1000
+    TTS_NAME = TTS_NAMES.get(TTS_PROVIDER, TTS_PROVIDER)
+    GREETING = greeting_text()
+    STATE["prompt"] = system_prompt()
+    STATE.pop("greeting_pcm", None)  # the next call speaks (and caches) the new greeting
+
+
+async def settings_get(request: web.Request) -> web.Response:
+    return web.json_response({"current": current_settings(), "llm_choices": LLM_CHOICES, "tts_choices": tts_choices(),
+                              "lines": [l["from_number"] for l in LINES], "busy": request.app["calls"]["active"] > 0})
+
+
+async def settings_post(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+        s = {k: str(body[k]).strip() for k in ("llm", "tts", "tts_model", "voice")}
+    except Exception:  # noqa: BLE001
+        return web.json_response({"error": "Send llm, tts, tts_model and voice."}, status=400)
+    choices = tts_choices()
+    if s["tts"] not in choices:
+        return web.json_response({"error": f"No API key for {s['tts']} on this server."}, status=400)
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,80}", s["llm"]) or not all(s[k] for k in s):
+        return web.json_response({"error": "Fill in every field."}, status=400)
+    if s["tts"] == "speechmatics" and s["voice"] not in SM_VOICES:
+        return web.json_response({"error": f"Speechmatics voices: {', '.join(SM_VOICES)}"}, status=400)
+    if request.app["calls"]["active"]:
+        return web.json_response({"error": "A call is in progress. Change models after it ends."}, status=409)
+    error = await probe_settings(request.app["http"], s)
+    if error:
+        return web.json_response({"error": error}, status=400)
+    apply_settings(s)
+    log(f"CONFIG    next call: LLM {GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL}, voice {TTS_NAME} {s['tts_model']} ({s['voice']})")
+    publish(**config_event("SETTINGS"))
+    if TTS_PROVIDER == "gradium":
+        asyncio.create_task(cache_greeting(request.app))
+    return web.json_response({"ok": True, "current": current_settings()})
+
+
+def mask(number: str) -> str:
+    return number[:3] + " ••• " + number[-4:] if len(number) > 8 else number
+
+
+async def dial(request: web.Request) -> web.Response:
+    """Place an outbound call that the agent answers."""
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    to = re.sub(r"[\s().-]", "", str(body.get("to", "")))
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", to):
+        return web.json_response({"error": "Use the full number with country code, for example +447700900123."}, status=400)
+    line = next((l for l in LINES if l["from_number"] == body.get("from")), LINES[0] if LINES else None)
+    if not line:
+        return web.json_response({"error": "No Vobiz number is set up for outbound calls."}, status=400)
+    if request.app["calls"]["active"] >= MAX_CALLS:
+        return web.json_response({"error": f"{MAX_CALLS} calls already in progress."}, status=429)
+    if time.time() - STATE.get("last_dial", 0) < 10:
+        return web.json_response({"error": "One call every 10 seconds. Try again shortly."}, status=429)
+    STATE["last_dial"] = time.time()
+    payload = {"from": line["from_number"], "to": to, "answer_url": f"{PUBLIC_URL}/answer/{PATH_TOKEN}",
+               "answer_method": "POST", "hangup_url": f"{PUBLIC_URL}/hangup/{PATH_TOKEN}", "hangup_method": "POST",
+               "time_limit": MAX_CALL_SECONDS}
+    url = f"https://api.vobiz.ai/api/v1/Account/{line['auth_id']}/Call/"
+    headers = {"X-Auth-ID": line["auth_id"], "X-Auth-Token": line["auth_token"], "Accept": "application/json"}
+    try:
+        async with request.app["http"].post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as r:
+            text = await r.text()
+            if r.status >= 300:
+                log(f"DIAL      Vobiz refused the call: {r.status} {text[:160]}")
+                return web.json_response({"error": f"Vobiz returned {r.status}: {text[:200]}"}, status=502)
+            data = json.loads(text or "{}")
+    except aiohttp.ClientError as e:
+        return web.json_response({"error": f"Could not reach Vobiz: {e}"}, status=502)
+    log(f"DIAL      calling {mask(to)} from {mask(line['from_number'])}")
+    return web.json_response({"ok": True, "request_uuid": data.get("request_uuid")})
 
 
 async def on_startup(app: web.Application) -> None:
@@ -882,7 +1069,7 @@ async def cache_greeting(app: web.Application) -> None:
                 break
         await ws.close()
         if pcm:
-            app["greeting_pcm"] = bytes(pcm)
+            STATE["greeting_pcm"] = bytes(pcm)
             log(f"TTS       greeting cached ({len(pcm) / (RATE * 2):.1f} s of audio)")
     except Exception as e:  # noqa: BLE001 - the greeting is synthesized per call instead
         log(f"TTS       could not cache the greeting: {e}")
@@ -897,13 +1084,16 @@ async def on_cleanup(app: web.Application) -> None:
 def make_app() -> web.Application:
     """Build the web app with token-protected routes."""
     app = web.Application()
-    app["prompt"] = system_prompt()
+    STATE["prompt"] = system_prompt()
     app["calls"] = {"active": 0}  # mutable: app state is frozen once the server starts
     app.router.add_route("*", f"/answer/{PATH_TOKEN}", answer)
     app.router.add_route("*", f"/hangup/{PATH_TOKEN}", hangup)
     app.router.add_get(f"/ws/{PATH_TOKEN}", media_stream)
     app.router.add_get(f"/live/{PATH_TOKEN}", live_page)
     app.router.add_get(f"/events/{PATH_TOKEN}", live_events)
+    app.router.add_get(f"/settings/{PATH_TOKEN}", settings_get)
+    app.router.add_post(f"/settings/{PATH_TOKEN}", settings_post)
+    app.router.add_post(f"/dial/{PATH_TOKEN}", dial)
     app.router.add_static("/assets/", Path(__file__).resolve().parents[2] / "logo")
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
