@@ -27,10 +27,11 @@ header{display:flex;align-items:center;gap:22px;padding:0 40px;height:72px;borde
 .hero{display:grid;grid-template-columns:1fr auto;align-items:end;gap:32px;padding:26px 40px 22px;flex:none;background:linear-gradient(180deg,#fff,#fff 40%,var(--grey));border-bottom:1px solid var(--line)}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--vz)}
 .eyebrow:before{content:"";border-left:7px solid var(--vz);border-top:7px solid transparent}
-.bignum{font-family:var(--display);font-weight:600;font-size:46px;letter-spacing:-.02em;line-height:1.1;margin-top:6px}
+.bignum{font-family:var(--display);font-weight:600;font-size:38px;letter-spacing:-.02em;line-height:1.1;margin-top:6px}
 .sub{color:var(--muted);margin-top:6px;font-size:14.5px}
 .sub b{color:var(--ink2);font-weight:500}
 .tiles{display:flex;gap:12px}
+.latnote{grid-column:2;margin-top:-18px;font-size:12px;color:var(--muted);text-align:right}
 .tile{width:178px;padding:14px 16px;background:#fff;border:1px solid var(--line);border-radius:10px}
 .tile .l{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .tile .v{font-family:var(--mono);font-size:30px;font-weight:500;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--ink)}
@@ -84,19 +85,21 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;
 </header>
 <section class="hero">
   <div>
-    <div class="eyebrow">Call the agent</div>
-    <div class="bignum" id="number">—</div>
-    <div class="sub">A real phone line on <b>Vobiz</b> · speech to text by <b>Speechmatics</b> · reply and voice by <b id="engine">—</b></div>
+    <div class="eyebrow">Live demo</div>
+    <div class="bignum">An AI voice agent on a real phone call</div>
+    <div class="sub">Phone line by <b>Vobiz</b> · speech to text by <b>Speechmatics</b> · reply and voice by <b id="engine">—</b></div>
+    <span id="number" hidden></span>
   </div>
   <div class="tiles">
     <div class="tile accent"><div class="l">Last reply</div><div class="v"><span id="latv">—</span><small>ms</small></div></div>
     <div class="tile"><div class="l">Average</div><div class="v"><span id="lata">—</span><small>ms</small></div></div>
     <div class="tile"><div class="l">Turns</div><div class="v" id="turnsN">0</div></div>
   </div>
+  <div class="latnote">Reply time on the server: from the end of the caller's turn to the agent's first audio</div>
 </section>
 <main>
   <section class="panel">
-    <div class="ptop"><span class="plabel">Live conversation</span><span class="pmeta">latency = end of caller's turn → first agent audio</span></div>
+    <div class="ptop"><span class="plabel">Live conversation</span><span class="pmeta">reply time shown on each answer</span></div>
     <div class="inner"><div id="msgs"></div></div>
   </section>
   <div class="side">
@@ -118,7 +121,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;
 <script>
 const $ = (id) => document.getElementById(id);
 const msgs = $("msgs"); let partialEl = null, callStart = null, lats = [], turns = 0, live = false, number = "", gl = false;
-const EMPTY = () => `<div class="empty"><div class="ring"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#e8541e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.8 2z"/></svg></div><h2>Waiting for a call</h2><p>Call ${number || "the number above"} and the conversation appears here as it happens.</p></div>`;
+const EMPTY = () => `<div class="empty"><div class="ring"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#e8541e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.8 2z"/></svg></div><h2>Waiting for a call</h2><p>Call the agent and the conversation appears here as it happens.</p></div>`;
 function fmtNum(n){ if(!n) return "—"; let m;
   if ((m = n.match(/^\+44(20)(\d{4})(\d{4})$/))) return `+44 ${m[1]} ${m[2]} ${m[3]}`;
   if ((m = n.match(/^\+44(\d{4})(\d{6})$/))) return `+44 ${m[1]} ${m[2]}`;
@@ -147,7 +150,7 @@ function handle(e){
   if (k === "PARTIAL") { if (!live) return; stage("stt"); if (!partialEl) partialEl = add("caller partial", "Caller · speaking", t); else partialEl.querySelector(".b").textContent = t; msgs.scrollTop = msgs.scrollHeight; return; }
   if (k === "CALLER") { if (partialEl) { partialEl.remove(); partialEl = null; } add("caller", "Caller", t); turns++; $("turnsN").textContent = turns; stage("llm"); return; }
   if (k === "AGENT") { if (partialEl) { partialEl.remove(); partialEl = null; } const last = msgs.lastElementChild;
-    if (last && last.classList.contains("agent") && !last.dataset.closed) last.querySelector(".b").textContent += " " + t; else add("agent", "Agent", t);
+    if (last && last.classList.contains("agent") && !last.dataset.closed) last.querySelector(".b").textContent += " " + t; else add("agent", "Voice agent", t);
     stage(gl ? "speak-gl" : "tts"); return; }
   if (k === "LATENCY") { const m = t.match(/(\d+)\s*ms/); if (!m) return; lats.push(+m[1]); drawLat();
     const a = [...msgs.querySelectorAll(".msg.agent")].pop(); if (a && !a.querySelector(".ms")) a.querySelector(".who").insertAdjacentHTML("beforeend", `<span class="ms">${m[1]} ms</span>`); return; }
