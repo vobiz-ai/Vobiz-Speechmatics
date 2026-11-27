@@ -107,7 +107,8 @@ body.open .scrim{opacity:1;pointer-events:auto} body.open .drawer{transform:none
 <header>
   <div class="logos"><img class="vz" src="/assets/vobiz-light.png" alt="Vobiz"><span class="x">×</span><img class="sm" src="/assets/speechmatics-black.png" alt="Speechmatics"></div>
   <div class="title">Phone voice agent</div>
-  <button class="gear" id="gear" style="margin-left:auto" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+  <button class="gear" id="clearb" style="margin-left:auto" aria-label="Clear the conversation and events"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Clear</button>
+  <button class="gear" id="gear" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
   <div class="status" id="pill"><i></i><span id="status">Waiting for a call</span><span class="tm" id="timer"></span></div>
 </header>
 <section class="hero">
@@ -245,6 +246,8 @@ $("to").oninput = () => { const to = $("to").value.replace(/[\s().-]/g, ""); if 
   const cc = S.lines.find(l => to.length > 3 && l.slice(0, 3) === to.slice(0, 3)); if (cc) $("from").value = cc; };
 function openDrawer(){ document.body.classList.add("open"); loadSettings().catch(() => say("savem", "Could not load settings.", false)); setTimeout(() => $("to").focus(), 250); }
 function closeDrawer(){ document.body.classList.remove("open"); }
+$("clearb").onclick = async () => { reset(); if (!live) { setLive(false, "Waiting for a call"); }
+  try { await fetch(API("clear"), {method: "POST"}); } catch (_) {} };
 $("gear").onclick = openDrawer; $("close").onclick = closeDrawer; $("scrim").onclick = closeDrawer;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 async function post(path, body){ const r = await fetch(API(path), {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});

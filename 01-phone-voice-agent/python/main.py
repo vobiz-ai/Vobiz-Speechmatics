@@ -1045,6 +1045,12 @@ async def dial(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "request_uuid": data.get("request_uuid")})
 
 
+async def clear_events(_request: web.Request) -> web.Response:
+    """Forget the events a newly opened live page would replay."""
+    EVENTS.clear()
+    return web.json_response({"ok": True})
+
+
 async def on_startup(app: web.Application) -> None:
     """Create the shared HTTP and TTS clients."""
     app["http"] = aiohttp.ClientSession()
@@ -1097,6 +1103,7 @@ def make_app() -> web.Application:
     app.router.add_get(f"/settings/{PATH_TOKEN}", settings_get)
     app.router.add_post(f"/settings/{PATH_TOKEN}", settings_post)
     app.router.add_post(f"/dial/{PATH_TOKEN}", dial)
+    app.router.add_post(f"/clear/{PATH_TOKEN}", clear_events)
     app.router.add_static("/assets/", Path(__file__).resolve().parents[2] / "logo")
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
