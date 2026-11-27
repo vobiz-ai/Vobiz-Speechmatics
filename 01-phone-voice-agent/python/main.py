@@ -48,7 +48,12 @@ LANGUAGE = os.getenv("SM_LANGUAGE", "en")
 # Text to Speech provider for the agent's voice: speechmatics (default), elevenlabs, or cartesia.
 # Every option streams raw 16-bit PCM at 16 kHz, the format the Stream element plays.
 TTS_PROVIDER = os.getenv("TTS_PROVIDER", "speechmatics").strip().lower()
-TTS_NAMES = {"speechmatics": "Speechmatics", "elevenlabs": "ElevenLabs", "cartesia": "Cartesia"}
+TTS_NAMES = {"speechmatics": "Speechmatics", "elevenlabs": "ElevenLabs", "cartesia": "Cartesia", "gemini-live": "Gemini Live"}
+# gemini-live: Gemini Live writes AND speaks the reply in one connection (LLM + voice), from the
+# text Speechmatics agent STT produces. It returns 24 kHz PCM, which Vobiz plays as is.
+GEMINI_LIVE = TTS_PROVIDER == "gemini-live"
+GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
+GEMINI_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
 
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
 CARTESIA_MODEL = os.getenv("CARTESIA_MODEL", "sonic-3.6")
@@ -87,6 +92,9 @@ MAX_CALL_SECONDS = int(os.getenv("MAX_CALL_SECONDS", "600"))
 RATE = 16000
 FRAME = 640  # 20 ms of 16-bit mono PCM at 16 kHz
 CHUNK = FRAME * 3  # 60 ms per playAudio message keeps barge-in responsive
+# Audio sent to the caller: 16 kHz from the TTS providers, 24 kHz from Gemini Live.
+OUT_RATE = 24000 if GEMINI_LIVE else RATE
+OUT_CHUNK = OUT_RATE * 2 * 60 // 1000
 # A sound over the agent pauses it. If no words follow within this many seconds, it was a
 # cough or an "mhm", and the agent carries on from the sentence it was cut off in.
 RESUME_AFTER_SECONDS = 2.0
@@ -149,9 +157,12 @@ def answer_xml() -> str:
 
 def system_prompt() -> str:
     """Load the agent's instructions from assets/agent.md."""
-    return (
-        PROMPT_FILE.read_text(encoding="utf-8").replace("{HANGUP_TOKEN}", HANGUP_TOKEN).replace("{TTS_NAME}", TTS_NAME)
-    )
+    text = PROMPT_FILE.read_text(encoding="utf-8")
+    if GEMINI_LIVE:
+        text = text.replace("and end your\nreply with {HANGUP_TOKEN}.", "and then call the end_call tool. Say nothing after calling it.")
+        text += ("\nIn this setup one Gemini Live model writes and speaks your replies; there is no "
+                 "separate text to speech step. The caller's words reach you as text from Speechmatics.\n")
+    return text.replace("{HANGUP_TOKEN}", HANGUP_TOKEN).replace("{TTS_NAME}", TTS_NAME)
 
 
 @dataclass
@@ -191,6 +202,17 @@ class Call:
         self.resume_from = 0  # first sentence the caller has not fully heard
         self.resume_task: asyncio.Task | None = None
         self.send_lock = asyncio.Lock()  # keeps playAudio in order across tasks
+        # Gemini Live (TTS_PROVIDER=gemini-live)
+        self.prompt: str = app["prompt"]
+        self.gl_cm = None
+        self.gl = None
+        self.gl_generating = False  # a reply is being generated
+        self.gl_drop = False  # discard the rest of the current generation (caller cut in)
+        self.gl_done: asyncio.Event | None = None
+        self.gl_sentence: Sentence | None = None
+        self.gl_text = ""
+        self.gl_carry = b""
+        self.gl_skip_ends = 0  # ends of replaced generations still to come from Gemini
 
     def spawn(self, coro) -> asyncio.Task:
         """Run a coroutine in the background and keep a reference until it finishes."""
@@ -209,14 +231,14 @@ class Call:
         """Send 16 kHz PCM to the caller as base64 playAudio messages."""
         # playAudio carries only the event and the media. Vobiz plays these messages
         # on the stream they arrive on.
-        for i in range(0, len(pcm), CHUNK):
+        for i in range(0, len(pcm), OUT_CHUNK):
             await self.send_vobiz(
                 {
                     "event": "playAudio",
                     "media": {
                         "contentType": "audio/x-l16",
-                        "sampleRate": RATE,
-                        "payload": base64.b64encode(pcm[i : i + CHUNK]).decode(),
+                        "sampleRate": OUT_RATE,
+                        "payload": base64.b64encode(pcm[i : i + OUT_CHUNK]).decode(),
                     },
                 }
             )
@@ -237,10 +259,10 @@ class Call:
                 sentence = next((s for s in self.sentences if s.sent < len(s.pcm)), None)
                 if sentence is None:
                     break
-                chunk = bytes(sentence.pcm[sentence.sent : sentence.sent + CHUNK])
+                chunk = bytes(sentence.pcm[sentence.sent : sentence.sent + OUT_CHUNK])
                 sentence.sent += len(chunk)
                 # Vobiz plays audio back to back, so track when what was sent will have played.
-                self.play_end = max(time.monotonic(), self.play_end) + len(chunk) / (RATE * 2)
+                self.play_end = max(time.monotonic(), self.play_end) + len(chunk) / (OUT_RATE * 2)
                 sentence.ends_at = self.play_end
                 self.speaking = True
                 await self.play_pcm(chunk)
@@ -309,6 +331,8 @@ class Call:
             return
         if pending:
             self.reply_task.cancel()
+        if GEMINI_LIVE and self.gl_generating:
+            self.gl_drop = True  # the rest of this Gemini reply is out of date
         if self.resume_task:
             self.resume_task.cancel()
         self.paused = self.speaking = self.hangup_after_speech = False
@@ -459,8 +483,130 @@ class Call:
             sentence.complete = True
             response.release()
 
+    # ---------- Gemini Live: LLM and voice in one connection ----------
+    async def start_gemini(self) -> None:
+        """Open the Gemini Live session for this call and start reading its replies."""
+        from google import genai
+        from google.genai import types
+
+        self.gl_types = types
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"), http_options={"api_version": "v1beta"})
+        config = types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            system_instruction=self.prompt,
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=GEMINI_VOICE))
+            ),
+            tools=[types.Tool(function_declarations=[types.FunctionDeclaration(
+                name="end_call", description="End the phone call. Call it right after saying goodbye.")])],
+            context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
+        )
+        self.gl_cm = client.aio.live.connect(model=GEMINI_LIVE_MODEL, config=config)
+        self.gl = await self.gl_cm.__aenter__()
+        log(f"LLM       Gemini Live session started ({GEMINI_LIVE_MODEL}, voice {GEMINI_VOICE})")
+        self.spawn(self.gemini_receiver())
+
+    def gl_emit_sentences(self, final: bool = False) -> None:
+        """Log each complete sentence of the reply transcript as it arrives."""
+        while m := SENTENCE_END.match(self.gl_text):
+            log(f"AGENT     {m.group(1).strip()}")
+            self.gl_text = self.gl_text[m.end():]
+        if final and self.gl_text.strip():
+            log(f"AGENT     {self.gl_text.strip()}")
+            self.gl_text = ""
+
+    def gl_finish(self) -> None:
+        """A generation is over (finished or interrupted)."""
+        if self.gl_skip_ends:
+            # The end of a reply the caller replaced: keep discarding until the new one starts.
+            self.gl_skip_ends -= 1
+            self.gl_drop = self.gl_skip_ends > 0
+            return
+        if not self.gl_drop:
+            self.gl_emit_sentences(final=True)
+        if self.gl_sentence:
+            self.gl_sentence.complete = True
+        self.gl_generating = False
+        self.gl_drop = False
+        self.gl_text = ""
+        if self.gl_done:
+            self.gl_done.set()
+
+    async def gemini_receiver(self) -> None:
+        """Route Gemini audio and transcript into the current reply, for the whole call."""
+        while True:
+            async for msg in self.gl.receive():
+                if msg.tool_call:
+                    for fc in msg.tool_call.function_calls or []:
+                        if fc.name == "end_call":
+                            log("CALL      agent ended the call after its goodbye")
+                            self.hangup_after_speech = True
+                            self.spawn(self.hangup_when_played())
+                        await self.gl.send_tool_response(function_responses=[
+                            self.gl_types.FunctionResponse(id=fc.id, name=fc.name, response={"ok": True})])
+                    continue
+                sc = msg.server_content
+                if sc is None:
+                    continue
+                if sc.model_turn and not self.gl_drop:
+                    for part in sc.model_turn.parts or []:
+                        if part.inline_data and part.inline_data.data and self.gl_sentence is not None:
+                            if self.turn_ended_at:
+                                elapsed_ms = (time.time() - self.turn_ended_at) * 1000
+                                log(f"LATENCY   end of caller turn -> first agent audio: {elapsed_ms:.0f} ms")
+                                self.turn_ended_at = 0.0
+                            data = self.gl_carry + part.inline_data.data
+                            cut = len(data) - (len(data) % 2)
+                            data, self.gl_carry = data[:cut], data[cut:]
+                            self.gl_sentence.pcm += data
+                            await self.flush()
+                if sc.output_transcription and sc.output_transcription.text and not self.gl_drop:
+                    self.gl_text += sc.output_transcription.text
+                    if self.gl_sentence is not None:
+                        self.gl_sentence.text += sc.output_transcription.text
+                    self.gl_emit_sentences()
+                if sc.interrupted or sc.generation_complete:
+                    self.gl_finish()
+
+    async def hangup_when_played(self) -> None:
+        """Stop the stream once the goodbye has played (the tool call can come after it)."""
+        await asyncio.sleep(0.3)
+        while self.gl_generating or time.monotonic() < self.play_end + PLAYBACK_MARGIN_SECONDS:
+            await asyncio.sleep(0.2)
+        if self.hangup_after_speech:
+            await self.send_vobiz({"event": "stop", "streamId": self.stream_id})
+
+    async def gemini_turn(self, text: str) -> None:
+        """Send one turn to Gemini Live and wait until its spoken reply has been generated."""
+        self.start_speech()
+        if self.gl_generating:
+            # The previous reply is still being generated: this turn interrupts it, and its
+            # remaining audio is discarded until Gemini reports that it ended.
+            self.gl_skip_ends += 1
+            self.gl_drop = True
+        else:
+            self.gl_drop = False
+        self.gl_sentence = Sentence("")
+        self.sentences.append(self.gl_sentence)
+        self.gl_text, self.gl_carry = "", b""
+        self.gl_done = asyncio.Event()
+        self.gl_generating = True
+        await self.gl.send_client_content(
+            turns=self.gl_types.Content(role="user", parts=[self.gl_types.Part(text=text)]), turn_complete=True)
+        try:
+            await asyncio.wait_for(self.gl_done.wait(), timeout=20)
+        except asyncio.TimeoutError:
+            log("LLM       Gemini Live reply timed out")
+            self.gl_skip_ends, self.gl_drop, self.gl_generating = 0, False, False
+        self.speech_done = True
+        await self.flush()
+
     async def reply(self, user_text: str) -> None:
         """Answer one caller turn, speaking each sentence as soon as the LLM writes it."""
+        if GEMINI_LIVE:
+            await self.gemini_turn(user_text)
+            return
         self.history.append({"role": "user", "content": user_text})
         self.start_speech()
         said = []
@@ -485,6 +631,9 @@ class Call:
 
     async def greet(self) -> None:
         """Speak the opening line."""
+        if GEMINI_LIVE:
+            await self.gemini_turn(f'(The phone call has just connected. Greet the caller with exactly: "{GREETING}")')
+            return
         log(f"AGENT     {GREETING}")
         self.history.append({"role": "assistant", "content": GREETING})
         self.start_speech()
@@ -524,6 +673,12 @@ class Call:
                     except Exception as e:  # noqa: BLE001 - network and session errors
                         log(f"STT       could not start a Speechmatics session: {e}")
                         break
+                    if GEMINI_LIVE:
+                        try:
+                            await self.start_gemini()
+                        except Exception as e:  # noqa: BLE001
+                            log(f"LLM       could not start Gemini Live: {e}")
+                            break
                     self.reply_task = self.spawn(self.greet())
                     self.spawn(self.end_after(MAX_CALL_SECONDS))
                 elif event == "playedStream":
@@ -546,6 +701,11 @@ class Call:
         for task in list(self.tasks):
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        if self.gl_cm is not None:
+            try:
+                await asyncio.wait_for(self.gl_cm.__aexit__(None, None, None), timeout=5)
+            except Exception:  # noqa: BLE001
+                pass
         if self.stt:
             try:
                 # Sends EndOfStream and waits briefly for the service to flush.
@@ -595,7 +755,7 @@ async def live_events(request: web.Request) -> web.StreamResponse:
     response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache",
                                            "X-Accel-Buffering": "no"})
     await response.prepare(request)
-    config = {"kind": "CONFIG", "number": DEMO_NUMBER, "llm": LLM_MODEL, "tts": TTS_NAME,
+    config = {"kind": "CONFIG", "number": DEMO_NUMBER, "llm": GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL, "tts": TTS_NAME,
               "stt": "Speechmatics Agent STT", "stt_url": SM_RT_URL or "default (EU)"}
     queue: asyncio.Queue = asyncio.Queue()
     LISTENERS.add(queue)
@@ -649,7 +809,7 @@ def check_config() -> None:
         name
         for name, value in (
             ("SPEECHMATICS_API_KEY", SM_API_KEY),
-            ("GEMINI_API_KEY or LLM_API_KEY", LLM_API_KEY),
+            ("GEMINI_API_KEY or LLM_API_KEY", os.getenv("GEMINI_API_KEY") if GEMINI_LIVE else LLM_API_KEY),
             ("PUBLIC_URL", PUBLIC_URL),
         )
         if not value
@@ -673,6 +833,8 @@ if __name__ == "__main__":
     log(f"Answer URL: {PUBLIC_URL}/answer/{PATH_TOKEN}")
     log(f"Hangup URL: {PUBLIC_URL}/hangup/{PATH_TOKEN}")
     log(f"Live page:  {PUBLIC_URL}/live/{PATH_TOKEN}")
-    voice = {"cartesia": CARTESIA_VOICE_ID, "elevenlabs": ELEVENLABS_VOICE_ID}.get(TTS_PROVIDER, SM_VOICE.value)
-    log(f"TTS: {TTS_NAME} ({voice})  LLM: {LLM_MODEL}  Listening on http://127.0.0.1:{PORT}")
+    voice = {"cartesia": CARTESIA_VOICE_ID, "elevenlabs": ELEVENLABS_VOICE_ID, "gemini-live": GEMINI_VOICE}.get(
+        TTS_PROVIDER, SM_VOICE.value)
+    llm = GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL
+    log(f"TTS: {TTS_NAME} ({voice})  LLM: {llm}  STT: {SM_RT_URL or 'default'}  Listening on http://127.0.0.1:{PORT}")
     web.run_app(make_app(), host="127.0.0.1", port=PORT, print=None)

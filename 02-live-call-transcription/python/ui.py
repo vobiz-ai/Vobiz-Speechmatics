@@ -59,8 +59,8 @@ def _logo(name: str) -> str:
 def page(events_path: str, vobiz_number: str, forward_to: str, language: str) -> bytes:
     return (
         PAGE.replace("__EVENTS_PATH__", events_path)
-        .replace("__LOGO_VZ__", _logo("vobiz-dark.png"))
-        .replace("__LOGO_SM__", _logo("speechmatics-white.png"))
+        .replace("__LOGO_VZ__", _logo("vobiz-light.png"))
+        .replace("__LOGO_SM__", _logo("speechmatics-black.png"))
         .replace("__VOBIZ_NUMBER__", escape(vobiz_number or ""))
         .replace("__FORWARD_TO__", escape(forward_to or ""))
         .replace("__LANGUAGE__", escape(language or "en"))
@@ -75,14 +75,14 @@ PAGE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vobiz × Speechmatics · Live call transcription</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Inter+Tight:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  --bg:#08151a; --panel:#0f2229; --ink:#eef5f4; --muted:#8fa9ad; --line:#1f3c45;
-  --vobiz:#ff5a1f; --sm:#29a383; --a:#ff7a45; --a-soft:rgba(255,90,31,.13); --b:#3cc49e; --b-soft:rgba(41,163,131,.15);
-  --ok:#29a383; --warn:#ffb547;
-  --display:"Inter",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:dark;
+  --bg:#f7f8f8; --panel:#fff; --ink:#160c08; --muted:#6b6f72; --line:#e6e8e9;
+  --vobiz:#e8541e; --sm:#1e3d49; --a:#e8541e; --a-soft:#fff3ec; --b:#1e3d49; --b-soft:#eef4f5;
+  --ok:#29a383; --warn:#e8541e;
+  --display:"Inter Tight","DM Sans",system-ui,sans-serif; --body:"DM Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -90,10 +90,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);d
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px max(16px,3vw);border-bottom:1px solid var(--line);background:var(--panel)}
 .brand{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:-.01em}
 .brand .x{color:var(--muted);font-weight:600;margin:0 6px}
-.brand{display:flex;align-items:center;gap:14px}.brand img.vz{height:28px}.brand img.sm{height:16px}.brand .title{margin-left:8px;padding-left:16px;border-left:1px solid var(--line);font-size:15px;font-weight:600}
+.brand{display:flex;align-items:center;gap:14px}.brand img.vz{height:28px}.brand img.sm{height:17px}.brand .title{margin-left:8px;padding-left:16px;border-left:1px solid var(--line);font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:-.01em}
 .status{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--line)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
-.status.live .dot{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 1.6s infinite}
+.status.live{background:var(--sm);color:#fff;border-color:var(--sm)}
+.status.live .dot{background:#3ccf8e;box-shadow:0 0 0 0 var(--ok);animation:pulse 1.6s infinite}
 .status.waiting .dot{background:var(--warn)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}100%{box-shadow:0 0 0 10px transparent}}
 .meta{margin-left:auto;display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
@@ -109,8 +110,8 @@ main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:0;min-hei
 .who{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .inbound .who{color:var(--a)} .outbound .who{color:var(--b)}
 .bubble{padding:12px 16px;border-radius:16px;font-size:17px;line-height:1.5}
-.inbound .bubble{background:var(--a-soft);border:1px solid rgba(255,90,31,.28);border-top-left-radius:4px}
-.outbound .bubble{background:var(--b-soft);border:1px solid rgba(41,163,131,.32);border-top-right-radius:4px}
+.inbound .bubble{background:var(--a-soft);border:1px solid #f7c9b2;border-top-left-radius:3px}
+.outbound .bubble{background:var(--b-soft);border:1px solid #cfdde1;border-top-right-radius:3px}
 .partial{color:var(--muted);font-style:italic}
 .live{position:sticky;bottom:0;margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:10px;background:linear-gradient(transparent,var(--bg) 30%)}
 .live div{font-size:14px;color:var(--muted);font-style:italic;min-height:0}
@@ -120,18 +121,18 @@ main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:0;min-hei
 .greet{align-self:center;font-size:13px;color:var(--ink);padding:6px 14px;border-radius:999px;background:color-mix(in srgb,var(--vobiz) 14%,transparent);border:1px solid color-mix(in srgb,var(--vobiz) 40%,transparent)}
 .greet b{color:var(--vobiz);margin-right:6px}
 .sys{align-self:center;font-size:12.5px;color:var(--muted);font-family:var(--mono);padding:4px 10px;border:1px dashed var(--line);border-radius:999px}
-aside{border-left:1px solid var(--line);background:var(--panel);padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
-aside h3{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+aside{border-left:1px solid #2c2522;background:#151110;color:#f3eeeb;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
+aside h3{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#8d837e;margin:0 0 8px}
 .legend{display:flex;flex-direction:column;gap:10px;font-size:14px}
 .legend div{display:flex;align-items:center;gap:10px}
 .sw{width:12px;height:12px;border-radius:4px}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.stat{border:1px solid var(--line);border-radius:10px;padding:10px}
+.stat{border:1px solid #2c2522;background:#1e1917;border-radius:10px;padding:10px}
 .stat .v{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
-.stat .l{font-size:12px;color:var(--muted)}
-.pipeline{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
-.pipeline span{font-family:var(--mono);color:var(--ink)}
-button{font:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.stat .l{font-size:12px;color:#8d837e}
+.pipeline{font-size:13px;color:#8d837e;display:flex;flex-direction:column;gap:6px}
+.pipeline span{font-family:var(--mono);color:#f3eeeb}
+button{font:inherit;font-size:13px;padding:7px 14px;border-radius:6px;border:1px solid #3a322e;background:#1e1917;color:#f3eeeb;cursor:pointer}
 button:focus-visible{outline:2px solid var(--sm);outline-offset:2px}
 </style>
 </head>
@@ -160,7 +161,7 @@ button:focus-visible{outline:2px solid var(--sm);outline-offset:2px}
       <h3>Speakers</h3>
       <div class="legend">
         <div><span class="sw" style="background:var(--a)"></span>Caller <small style="color:var(--muted)">· inbound track</small></div>
-        <div><span class="sw" style="background:var(--b)"></span>Bridged party <small style="color:var(--muted)">· outbound track</small></div>
+        <div><span class="sw" style="background:#29a383"></span>Bridged party <small style="color:var(--muted)">· outbound track</small></div>
       </div>
     </div>
     <div>
