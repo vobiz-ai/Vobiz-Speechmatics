@@ -210,6 +210,8 @@ class Call:
         self.send_lock = asyncio.Lock()  # keeps playAudio in order across tasks
         # Gemini Live (TTS_PROVIDER=gemini-live)
         self.prompt: str = app["prompt"]
+        self.app = app
+        self.started = False
         self.gl_cm = None
         self.gl = None
         self.gl_generating = False  # a reply is being generated
@@ -703,7 +705,14 @@ class Call:
         log(f"AGENT     {GREETING}")
         self.history.append({"role": "assistant", "content": GREETING})
         self.start_speech()
-        await self.speak(GREETING)
+        cached = self.app.get("greeting_pcm")
+        if cached:
+            # Synthesized once at startup: the caller hears the first word immediately.
+            self.sentences.append(Sentence(GREETING, pcm=bytearray(cached), complete=True))
+        else:
+            await self.speak(GREETING)
+            if self.sentences and self.sentences[-1].complete and self.sentences[-1].pcm:
+                self.app["greeting_pcm"] = bytes(self.sentences[-1].pcm)
         self.speech_done = True
         await self.flush()
 
@@ -726,11 +735,15 @@ class Call:
                     if self.stt:
                         await self.stt.send_audio(base64.b64decode(data["media"]["payload"]))
                 elif event == "start":
-                    if self.stt:
+                    if self.started:
                         continue  # one agent STT session per stream
+                    self.started = True
                     start = data["start"]
                     self.stream_id = start.get("streamId")
                     log(f"CALL      started call={start.get('callId')} format={start.get('mediaFormat')}")
+                    if not GEMINI_LIVE:
+                        # Greet at once; the Speechmatics session connects while the greeting plays.
+                        self.reply_task = self.spawn(self.greet())
                     try:
                         await self.start_stt()
                     except AuthenticationError:
@@ -745,7 +758,8 @@ class Call:
                         except Exception as e:  # noqa: BLE001
                             log(f"LLM       could not start Gemini Live: {e}")
                             break
-                    self.reply_task = self.spawn(self.greet())
+                    if GEMINI_LIVE:
+                        self.reply_task = self.spawn(self.greet())
                     self.spawn(self.end_after(MAX_CALL_SECONDS))
                 elif event == "playedStream":
                     # Skip an answer to a checkpoint whose audio was cleared, or while paused.
@@ -845,6 +859,33 @@ async def on_startup(app: web.Application) -> None:
     """Create the shared HTTP and TTS clients."""
     app["http"] = aiohttp.ClientSession()
     app["tts"] = tts.AsyncClient(api_key=SM_API_KEY)
+    if TTS_PROVIDER == "gradium":
+        app["greeting_task"] = asyncio.create_task(cache_greeting(app))
+
+
+async def cache_greeting(app: web.Application) -> None:
+    """Synthesize the greeting once, so every call can start speaking without waiting."""
+    try:
+        ws = await app["http"].ws_connect(GRADIUM_URL, headers={"x-api-key": GRADIUM_API_KEY}, max_msg_size=0)
+        await ws.send_str(json.dumps({"type": "setup", "model_name": GRADIUM_MODEL, "voice_id": GRADIUM_VOICE_ID,
+                                      "output_format": "pcm_16000", "retry_for_s": 3}))
+        if (await ws.receive_json(timeout=10)).get("type") != "ready":
+            return
+        await ws.send_str(json.dumps({"type": "text", "text": GREETING}))
+        await ws.send_str(json.dumps({"type": "end_of_stream"}))
+        pcm = bytearray()
+        async for m in ws:
+            msg = json.loads(m.data)
+            if msg.get("type") == "audio":
+                pcm += base64.b64decode(msg["audio"])
+            elif msg.get("type") in ("end_of_stream", "error"):
+                break
+        await ws.close()
+        if pcm:
+            app["greeting_pcm"] = bytes(pcm)
+            log(f"TTS       greeting cached ({len(pcm) / (RATE * 2):.1f} s of audio)")
+    except Exception as e:  # noqa: BLE001 - the greeting is synthesized per call instead
+        log(f"TTS       could not cache the greeting: {e}")
 
 
 async def on_cleanup(app: web.Application) -> None:
