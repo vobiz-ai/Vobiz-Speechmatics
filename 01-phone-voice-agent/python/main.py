@@ -48,12 +48,17 @@ LANGUAGE = os.getenv("SM_LANGUAGE", "en")
 # Text to Speech provider for the agent's voice: speechmatics (default), elevenlabs, or cartesia.
 # Every option streams raw 16-bit PCM at 16 kHz, the format the Stream element plays.
 TTS_PROVIDER = os.getenv("TTS_PROVIDER", "speechmatics").strip().lower()
-TTS_NAMES = {"speechmatics": "Speechmatics", "elevenlabs": "ElevenLabs", "cartesia": "Cartesia", "gemini-live": "Gemini Live"}
+TTS_NAMES = {"speechmatics": "Speechmatics", "elevenlabs": "ElevenLabs", "cartesia": "Cartesia", "gemini-live": "Gemini Live", "gradium": "Gradium"}
 # gemini-live: Gemini Live writes AND speaks the reply in one connection (LLM + voice), from the
 # text Speechmatics agent STT produces. It returns 24 kHz PCM, which Vobiz plays as is.
 GEMINI_LIVE = TTS_PROVIDER == "gemini-live"
 GEMINI_LIVE_MODEL = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
 GEMINI_VOICE = os.getenv("GEMINI_VOICE", "Aoede")
+# gradium: Gradium text to speech over a WebSocket (about 70 ms to first audio from US East).
+GRADIUM_API_KEY = os.getenv("GRADIUM_API_KEY")
+GRADIUM_URL = os.getenv("GRADIUM_URL", "wss://us.api.gradium.ai/api/speech/tts")
+GRADIUM_MODEL = os.getenv("GRADIUM_MODEL", "gradium-tts-beta-202611")
+GRADIUM_VOICE_ID = os.getenv("GRADIUM_VOICE_ID", "YTpq7expH9539ERJ")
 
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
 CARTESIA_MODEL = os.getenv("CARTESIA_MODEL", "sonic-3.6")
@@ -118,6 +123,7 @@ CUSTOM_VOCAB = [
 ]
 
 SENTENCE_END = re.compile(r"(.+?[.!?])(\s+|$)", re.S)
+FIRST_CLAUSE = re.compile(r"(.{18,}?[,;:])(\s+)", re.S)
 
 
 # Live page: every log line is also sent to open /live pages as a server-sent event.
@@ -410,6 +416,7 @@ class Call:
         if LLM_REASONING_EFFORT:
             body["reasoning_effort"] = LLM_REASONING_EFFORT
         buf = ""
+        first = True
         async with self.http.post(LLM_URL, json=body, headers={"Authorization": f"Bearer {LLM_API_KEY}"}) as r:
             if r.status != 200:
                 log("LLM       error", r.status, (await r.text())[:300])
@@ -422,7 +429,13 @@ class Call:
                 if not chunk.get("choices"):
                     continue
                 buf += chunk["choices"][0].get("delta", {}).get("content") or ""
+                # Speak the first clause as soon as it is complete, so the voice starts sooner.
+                if first and (m := FIRST_CLAUSE.match(buf)):
+                    first = False
+                    yield m.group(1).strip()
+                    buf = buf[m.end() :]
                 while m := SENTENCE_END.match(buf):
+                    first = False
                     yield m.group(1).strip()
                     buf = buf[m.end() :]
         if buf.strip():
@@ -451,8 +464,59 @@ class Call:
             )
         return await self.tts.generate(text=text, voice=SM_VOICE, output_format=tts.OutputFormat.RAW_PCM_16000)
 
+    async def gradium_socket(self):
+        """Open a Gradium TTS socket and wait until it is ready for text."""
+        ws = await self.http.ws_connect(GRADIUM_URL, headers={"x-api-key": GRADIUM_API_KEY}, max_msg_size=0)
+        await ws.send_str(json.dumps({"type": "setup", "model_name": GRADIUM_MODEL, "voice_id": GRADIUM_VOICE_ID,
+                                      "output_format": "pcm_16000", "retry_for_s": 3}))
+        msg = await ws.receive_json(timeout=10)
+        if msg.get("type") != "ready":
+            await ws.close()
+            raise RuntimeError(f"Gradium setup failed: {msg}")
+        return ws
+
+    async def speak_gradium(self, text: str) -> None:
+        """One sentence through Gradium; the next socket opens while this one speaks."""
+        try:
+            task = getattr(self, "gr_next", None)
+            ws = await task if task else await self.gradium_socket()
+        except Exception as e:  # noqa: BLE001 - a spare that failed: open a fresh one
+            try:
+                ws = await self.gradium_socket()
+            except Exception as e2:  # noqa: BLE001
+                log(f"TTS       Gradium error: {e2 or e}")
+                return
+        self.gr_next = self.spawn(self.gradium_socket())
+        sentence = Sentence(text)
+        self.sentences.append(sentence)
+        try:
+            await ws.send_str(json.dumps({"type": "text", "text": text}))
+            await ws.send_str(json.dumps({"type": "end_of_stream"}))
+            async for m in ws:
+                if m.type != aiohttp.WSMsgType.TEXT:
+                    break
+                msg = json.loads(m.data)
+                if msg.get("type") == "audio":
+                    if self.turn_ended_at:
+                        elapsed_ms = (time.time() - self.turn_ended_at) * 1000
+                        log(f"LATENCY   end of caller turn -> first agent audio: {elapsed_ms:.0f} ms")
+                        self.turn_ended_at = 0.0
+                    sentence.pcm += base64.b64decode(msg["audio"])
+                    await self.flush()
+                elif msg.get("type") == "end_of_stream":
+                    break
+                elif msg.get("type") == "error":
+                    log(f"TTS       Gradium error: {msg}")
+                    break
+        finally:
+            sentence.complete = True
+            await ws.close()
+
     async def speak(self, text: str) -> None:
         """Stream the TTS provider's 16 kHz PCM to the caller as it arrives, keeping a copy."""
+        if TTS_PROVIDER == "gradium":
+            await self.speak_gradium(text)
+            return
         try:
             response = await self.tts_request(text)
         except (tts.AuthenticationError, tts.TransportError, tts.ConnectionError, aiohttp.ClientError) as e:
@@ -818,6 +882,8 @@ def check_config() -> None:
         sys.exit(f"TTS_PROVIDER must be one of: {', '.join(TTS_NAMES)} (got {TTS_PROVIDER!r})")
     if TTS_PROVIDER == "cartesia" and not CARTESIA_API_KEY:
         missing.append("CARTESIA_API_KEY (or set TTS_PROVIDER)")
+    if TTS_PROVIDER == "gradium" and not GRADIUM_API_KEY:
+        missing.append("GRADIUM_API_KEY (or set TTS_PROVIDER)")
     if TTS_PROVIDER == "elevenlabs" and not ELEVENLABS_API_KEY:
         missing.append("ELEVENLABS_API_KEY (or set TTS_PROVIDER)")
     if missing:
@@ -833,7 +899,8 @@ if __name__ == "__main__":
     log(f"Answer URL: {PUBLIC_URL}/answer/{PATH_TOKEN}")
     log(f"Hangup URL: {PUBLIC_URL}/hangup/{PATH_TOKEN}")
     log(f"Live page:  {PUBLIC_URL}/live/{PATH_TOKEN}")
-    voice = {"cartesia": CARTESIA_VOICE_ID, "elevenlabs": ELEVENLABS_VOICE_ID, "gemini-live": GEMINI_VOICE}.get(
+    voice = {"cartesia": CARTESIA_VOICE_ID, "elevenlabs": ELEVENLABS_VOICE_ID, "gemini-live": GEMINI_VOICE,
+             "gradium": GRADIUM_VOICE_ID}.get(
         TTS_PROVIDER, SM_VOICE.value)
     llm = GEMINI_LIVE_MODEL if GEMINI_LIVE else LLM_MODEL
     log(f"TTS: {TTS_NAME} ({voice})  LLM: {llm}  STT: {SM_RT_URL or 'default'}  Listening on http://127.0.0.1:{PORT}")
