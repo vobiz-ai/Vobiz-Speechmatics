@@ -112,9 +112,27 @@ CUSTOM_VOCAB = [
 SENTENCE_END = re.compile(r"(.+?[.!?])(\s+|$)", re.S)
 
 
+# Live page: every log line is also sent to open /live pages as a server-sent event.
+EVENTS: list[dict] = []          # recent events, replayed when a page opens
+LISTENERS: set[asyncio.Queue] = set()
+DEMO_NUMBER = os.getenv("DEMO_NUMBER", "")
+
+
+def publish(kind: str, text: str = "", **extra) -> None:
+    """Send one event to every open live page."""
+    event = {"t": time.time(), "kind": kind, "text": text, **extra}
+    EVENTS.append(event)
+    del EVENTS[:-300]
+    for queue in list(LISTENERS):
+        queue.put_nowait(event)
+
+
 def log(*parts: object) -> None:
-    """Print a timestamped log line."""
+    """Print a timestamped log line and publish it to the live page."""
     print(time.strftime("%H:%M:%S"), *parts, flush=True)
+    line = " ".join(str(p) for p in parts)
+    kind, _, text = line.partition(" ")
+    publish(kind, text.strip())
 
 
 def answer_xml() -> str:
@@ -342,6 +360,7 @@ class Call:
             text = message["segment"]["transcript"].strip()
             if text:
                 self.turn_text.append(text)
+                publish("PARTIAL", " ".join(self.turn_text))
 
         # EndOfTurn is the last message of a turn: the moment to answer.
         @client.on(ServerMessageType.END_OF_TURN)
@@ -565,6 +584,37 @@ async def media_stream(request: web.Request) -> web.WebSocketResponse:
     return sock
 
 
+async def live_page(_request: web.Request) -> web.Response:
+    """The live call page: transcript, latency and pipeline, updated as the call runs."""
+    html = (Path(__file__).with_name("live.html")).read_text()
+    return web.Response(text=html, content_type="text/html")
+
+
+async def live_events(request: web.Request) -> web.StreamResponse:
+    """Server-sent events for the live page: config first, then recent and new events."""
+    response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache",
+                                           "X-Accel-Buffering": "no"})
+    await response.prepare(request)
+    config = {"kind": "CONFIG", "number": DEMO_NUMBER, "llm": LLM_MODEL, "tts": TTS_NAME,
+              "stt": "Speechmatics Agent STT", "stt_url": SM_RT_URL or "default (EU)"}
+    queue: asyncio.Queue = asyncio.Queue()
+    LISTENERS.add(queue)
+    try:
+        for event in [config, *EVENTS]:
+            await response.write(f"data: {json.dumps(event)}\n\n".encode())
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=15)
+                await response.write(f"data: {json.dumps(event)}\n\n".encode())
+            except asyncio.TimeoutError:
+                await response.write(b": keepalive\n\n")
+    except (ConnectionResetError, asyncio.CancelledError):
+        pass
+    finally:
+        LISTENERS.discard(queue)
+    return response
+
+
 async def on_startup(app: web.Application) -> None:
     """Create the shared HTTP and TTS clients."""
     app["http"] = aiohttp.ClientSession()
@@ -585,6 +635,9 @@ def make_app() -> web.Application:
     app.router.add_route("*", f"/answer/{PATH_TOKEN}", answer)
     app.router.add_route("*", f"/hangup/{PATH_TOKEN}", hangup)
     app.router.add_get(f"/ws/{PATH_TOKEN}", media_stream)
+    app.router.add_get(f"/live/{PATH_TOKEN}", live_page)
+    app.router.add_get(f"/events/{PATH_TOKEN}", live_events)
+    app.router.add_static("/assets/", Path(__file__).resolve().parents[2] / "logo")
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
     return app
@@ -619,6 +672,7 @@ if __name__ == "__main__":
     check_config()
     log(f"Answer URL: {PUBLIC_URL}/answer/{PATH_TOKEN}")
     log(f"Hangup URL: {PUBLIC_URL}/hangup/{PATH_TOKEN}")
+    log(f"Live page:  {PUBLIC_URL}/live/{PATH_TOKEN}")
     voice = {"cartesia": CARTESIA_VOICE_ID, "elevenlabs": ELEVENLABS_VOICE_ID}.get(TTS_PROVIDER, SM_VOICE.value)
     log(f"TTS: {TTS_NAME} ({voice})  LLM: {LLM_MODEL}  Listening on http://127.0.0.1:{PORT}")
     web.run_app(make_app(), host="127.0.0.1", port=PORT, print=None)

@@ -6,7 +6,9 @@ browser before (or during) a call to watch both speakers transcribed live.
 """
 
 import asyncio
+import base64
 import json
+from pathlib import Path
 from html import escape
 
 CLIENTS: set = set()
@@ -45,9 +47,20 @@ async def serve_events(ws) -> None:
         CLIENTS.discard(ws)
 
 
+def _logo(name: str) -> str:
+    """The logo as a data URI, so the page needs no extra route."""
+    path = Path(__file__).resolve().parents[2] / "logo" / name
+    try:
+        return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
+    except OSError:
+        return ""
+
+
 def page(events_path: str, vobiz_number: str, forward_to: str, language: str) -> bytes:
     return (
         PAGE.replace("__EVENTS_PATH__", events_path)
+        .replace("__LOGO_VZ__", _logo("vobiz-dark.png"))
+        .replace("__LOGO_SM__", _logo("speechmatics-white.png"))
         .replace("__VOBIZ_NUMBER__", escape(vobiz_number or ""))
         .replace("__FORWARD_TO__", escape(forward_to or ""))
         .replace("__LANGUAGE__", escape(language or "en"))
@@ -60,28 +73,24 @@ PAGE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Live Call Transcript · Speechmatics × Vobiz</title>
+<title>Vobiz × Speechmatics · Live call transcription</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  --bg:#f5f6f8; --panel:#fff; --ink:#14161c; --muted:#5f6576; --line:#dfe2e8;
-  --vobiz:#e83c00; --sm:#4b3fd1; --a:#1d6fd8; --a-soft:#e4effd; --b:#b2399a; --b-soft:#f7e4f3;
-  --ok:#14915f; --warn:#c77700;
-  --display:"Bricolage Grotesque",system-ui,sans-serif; --body:"Figtree",system-ui,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --bg:#08151a; --panel:#0f2229; --ink:#eef5f4; --muted:#8fa9ad; --line:#1f3c45;
+  --vobiz:#ff5a1f; --sm:#29a383; --a:#ff7a45; --a-soft:rgba(255,90,31,.13); --b:#3cc49e; --b-soft:rgba(41,163,131,.15);
+  --ok:#29a383; --warn:#ffb547;
+  --display:"Inter",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#0e1015; --panel:#161920; --ink:#eceef3; --muted:#9aa1b2; --line:#2a2f3a;
-  --vobiz:#ff6a33; --sm:#8f86ff; --a:#5aa2ff; --a-soft:#14243b; --b:#e277cb; --b-soft:#33192e;
-  --ok:#3ccf8e; --warn:#f0a531; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);display:flex;flex-direction:column}
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px max(16px,3vw);border-bottom:1px solid var(--line);background:var(--panel)}
 .brand{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:-.01em}
 .brand .x{color:var(--muted);font-weight:600;margin:0 6px}
-.brand .sm{color:var(--sm)} .brand .vb{color:var(--vobiz)}
+.brand{display:flex;align-items:center;gap:14px}.brand img.vz{height:28px}.brand img.sm{height:16px}.brand .title{margin-left:8px;padding-left:16px;border-left:1px solid var(--line);font-size:15px;font-weight:600}
 .status{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--line)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
 .status.live .dot{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 1.6s infinite}
@@ -99,9 +108,9 @@ main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:0;min-hei
 .turn.outbound{align-self:flex-end;align-items:flex-end}
 .who{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .inbound .who{color:var(--a)} .outbound .who{color:var(--b)}
-.bubble{padding:10px 14px;border-radius:14px;font-size:16px;line-height:1.5}
-.inbound .bubble{background:var(--a-soft);border-top-left-radius:4px}
-.outbound .bubble{background:var(--b-soft);border-top-right-radius:4px}
+.bubble{padding:12px 16px;border-radius:16px;font-size:17px;line-height:1.5}
+.inbound .bubble{background:var(--a-soft);border:1px solid rgba(255,90,31,.28);border-top-left-radius:4px}
+.outbound .bubble{background:var(--b-soft);border:1px solid rgba(41,163,131,.32);border-top-right-radius:4px}
 .partial{color:var(--muted);font-style:italic}
 .live{position:sticky;bottom:0;margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:10px;background:linear-gradient(transparent,var(--bg) 30%)}
 .live div{font-size:14px;color:var(--muted);font-style:italic;min-height:0}
@@ -128,7 +137,7 @@ button:focus-visible{outline:2px solid var(--sm);outline-offset:2px}
 </head>
 <body>
 <header>
-  <div class="brand"><span class="sm">Speechmatics</span><span class="x">×</span><span class="vb">Vobiz</span></div>
+  <div class="brand"><img class="vz" src="__LOGO_VZ__" alt="Vobiz"><span class="x">×</span><img class="sm" src="__LOGO_SM__" alt="Speechmatics"><span class="title">Live call transcription</span></div>
   <div id="status" class="status waiting"><span class="dot"></span><span id="statusText">Waiting for a call</span></div>
   <div class="meta">
     <span>Vobiz number <b>__VOBIZ_NUMBER__</b></span>
