@@ -588,7 +588,7 @@ async def main(argv: list[str] | None = None) -> None:
     # A random path segment keeps the answer XML and audio socket private to
     # this run. The audio stream WebSocket is unsigned, and Vobiz only signs
     # HTTP callbacks when callback credentials are configured.
-    token = secrets.token_urlsafe(16)
+    token = os.getenv("SM_VOBIZ_PATH_TOKEN") or secrets.token_urlsafe(16)
     answer_path, hangup_path, stream_path = (
         f"/answer/{token}",
         f"/hangup/{token}",
