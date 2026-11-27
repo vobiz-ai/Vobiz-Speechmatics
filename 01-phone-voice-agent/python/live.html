@@ -238,6 +238,9 @@ async function loadSettings(){
   if (S.busy) say("savem", "A call is in progress: models can be changed after it ends.");
 }
 $("tts").onchange = () => onProvider(false);
+// Pick the caller ID from the same country as the number being called (a UK number to an Indian mobile is refused).
+$("to").oninput = () => { const to = $("to").value.replace(/[\s().-]/g, ""); if (!S) return;
+  const cc = S.lines.find(l => to.length > 3 && l.slice(0, 3) === to.slice(0, 3)); if (cc) $("from").value = cc; };
 function openDrawer(){ document.body.classList.add("open"); loadSettings().catch(() => say("savem", "Could not load settings.", false)); setTimeout(() => $("to").focus(), 250); }
 function closeDrawer(){ document.body.classList.remove("open"); }
 $("gear").onclick = openDrawer; $("close").onclick = closeDrawer; $("scrim").onclick = closeDrawer;
