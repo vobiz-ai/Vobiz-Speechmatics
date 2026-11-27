@@ -258,20 +258,26 @@ function scroll(){ feed.scrollTop = feed.scrollHeight; }
 const liveBox = document.getElementById('live');
 const liveEl = {inbound: document.getElementById('liveIn'), outbound: document.getElementById('liveOut')};
 function add(node){ feed.insertBefore(node, liveBox); }
-function sys(text){ empty.hidden = true; const d = document.createElement('div'); d.className = 'sys'; d.textContent = text; add(d); last = null; scroll(); }
+function sys(text){ Object.keys(open).forEach(k => delete open[k]); empty.hidden = true; const d = document.createElement('div'); d.className = 'sys'; d.textContent = text; add(d); last = null; scroll(); }
 function greet(text){ empty.hidden = true; const d = document.createElement('div'); d.className = 'greet'; d.innerHTML = '<b>Vobiz played</b>'; d.appendChild(document.createTextNode(text)); add(d); last = null; scroll(); }
 function setLive(ch, text){ const el = liveEl[ch]; if (!el) return; el.innerHTML = ''; if (text){ const b = document.createElement('b'); b.textContent = LABEL[ch] || ch; el.appendChild(b); el.appendChild(document.createTextNode(text + ' …')); } }
 const GREETING = /this call is being transcribed\s*\.?/i;
 let greeted = false;
+// One open bubble per speaker: words keep joining it until that speaker pauses for PAUSE_MS,
+// even if the other side speaks in between. A pause starts a new bubble.
+const PAUSE_MS = 1200;
+const open = {};
 function turnFor(ch){
-  if (last && last.ch === ch) return last;
+  const o = open[ch];
+  if (o && Date.now() - o.at < PAUSE_MS) { o.at = Date.now(); return o; }
   empty.hidden = true;
   const t = document.createElement('div'); t.className = 'turn ' + ch;
   t.innerHTML = '<div class="who"></div><div class="bubble"><span class="final"></span></div>';
   t.querySelector('.who').textContent = LABEL[ch] || ch;
   add(t);
   count.turns++; document.getElementById('nTurns').textContent = count.turns;
-  last = {ch, final: t.querySelector('.final')};
+  last = {ch, final: t.querySelector('.final'), at: Date.now()};
+  open[ch] = last;
   return last;
 }
 function words(s){ return (s.match(/\S+/g) || []).length; }
@@ -299,7 +305,9 @@ function onEvent(e){
       text = text.replace(GREETING, '').replace(/^\s+/, '');
       if (!text) return;
     }
-    const t = turnFor(e.channel); t.final.textContent += (t.final.textContent ? '' : '') + text;
+    if (!/[A-Za-z0-9]/.test(text)) { const o = open[e.channel]; if (o) { o.final.textContent += text.trim(); o.at = Date.now(); } return; }
+    const t = turnFor(e.channel); const cur = t.final.textContent;
+    t.final.textContent = cur ? (cur + ' ' + text.trim()).replace(/\s+([.,?!])/g, '$1') : text.trim();
     count[e.channel] = (count[e.channel] || 0) + words(e.text);
     document.getElementById('nIn').textContent = count.inbound;
     document.getElementById('nOut').textContent = count.outbound;
@@ -314,7 +322,7 @@ function connect(){
   ws.onopen = () => { if (!startedAt) setStatus('waiting', 'Waiting for a call'); };
 }
 document.getElementById('clear').onclick = () => {
-  feed.querySelectorAll('.turn,.sys,.greet').forEach(n => n.remove()); setLive('inbound',''); setLive('outbound',''); last = null; empty.hidden = false;
+  feed.querySelectorAll('.turn,.sys,.greet').forEach(n => n.remove()); setLive('inbound',''); setLive('outbound',''); last = null; empty.hidden = false; Object.keys(open).forEach(k => delete open[k]);
   count.inbound = count.outbound = count.turns = 0;
   ['nIn','nOut','nTurns'].forEach(id => document.getElementById(id).textContent = '0');
 };

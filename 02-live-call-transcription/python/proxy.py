@@ -185,7 +185,7 @@ class CallSession:
     async def _run(self) -> None:
         transcription_config = TranscriptionConfig(
             language=LANGUAGE,
-            max_delay=0.7,
+            max_delay=1.5,  # fewer, fuller final segments for two people talking
             enable_partials=True,
             model=Model.ENHANCED,
             diarization="channel",
