@@ -102,7 +102,10 @@ OUT_RATE = 24000 if GEMINI_LIVE else RATE
 OUT_CHUNK = OUT_RATE * 2 * 60 // 1000
 # A sound over the agent pauses it. If no words follow within this many seconds, it was a
 # cough or an "mhm", and the agent carries on from the sentence it was cut off in.
-RESUME_AFTER_SECONDS = 2.0
+RESUME_AFTER_SECONDS = float(os.getenv("RESUME_AFTER_SECONDS", "0.8"))
+# Pause on any voice activity (coughs, line noise, "mhm"). Off by default: on a phone line it
+# stops the agent too often. Recognized words still interrupt it either way.
+PAUSE_ON_SOUND = os.getenv("PAUSE_ON_SOUND", "false").strip().lower() in ("1", "true", "yes")
 # Network delay means audio plays a little later than it is sent: count a sentence as heard
 # only once it should have finished this long ago.
 PLAYBACK_MARGIN_SECONDS = 0.3
@@ -392,7 +395,7 @@ class Call:
         # It pauses the agent at once, so barge-in stays quick, but keeps the reply.
         @client.on(ServerMessageType.SPEECH_STARTED)
         def on_voice_activity(_message):
-            if self.speaking or self.paused:
+            if PAUSE_ON_SOUND and (self.speaking or self.paused):
                 self.spawn(self.pause())
 
         @client.on(ServerMessageType.ADD_SEGMENT)
