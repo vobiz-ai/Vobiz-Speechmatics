@@ -227,7 +227,8 @@ const fmtN = (n) => { let m; if ((m = n.match(/^\+44(\d{4})(\d{6})$/))) return `
 const $ = (id) => document.getElementById(id);
 LINES.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = fmtN(n); $('from').appendChild(o); });
 const clean = (v) => v.replace(/[\s().-]/g, '');
-$('pa').oninput = () => { const a = clean($('pa').value); const l = LINES.find(n => a.length > 3 && n.slice(0, 3) === a.slice(0, 3)); if (l) $('from').value = l; };
+// The US number reaches both UK and Indian phones; the UK number cannot call Indian mobiles.
+const US = LINES.find(n => n.startsWith('+1')); if (US) $('from').value = US;
 const openD = () => { document.body.classList.add('open'); setTimeout(() => $('pa').focus(), 250); };
 const closeD = () => document.body.classList.remove('open');
 $('gear').onclick = openD; $('close').onclick = closeD; $('scrim').onclick = closeD;
